@@ -34,6 +34,17 @@ Chemotion Inventorizer is a desktop app for viewing, bulk-editing, and printing 
 2. Clone the repository or download it using **Code → Download ZIP** and extract it. Keep the project folder intact when moving or sharing the app.
 3. Open `Chemotion Inventorizer.app` on macOS or double-click `Chemotion Inventorizer.cmd` on Windows. Keep an internet connection available during automatic dependency installation. The first launch may take a few minutes.
 
+If macOS says **“Chemotion Inventorizer.app” cannot be opened**:
+
+1. Open Terminal, type `cd ` (including the space), drag the extracted project folder into Terminal, and press Return.
+2. Run:
+
+   ```sh
+   chmod +x "Chemotion Inventorizer.app/Contents/MacOS/Chemotion Inventorizer"
+   ```
+
+3. Reopen the app.
+
 ### Common setup
 
 1. Enter the Chemotion server root URL (for example, `https://eln.example.org`), your username, and password, then select **Sign in**.
@@ -52,16 +63,6 @@ Chemotion Inventorizer is a desktop app for viewing, bulk-editing, and printing 
 ![Inventory verification checklist with anonymized locations](docs/images/checklist-anonymized.png)
 
 *A4 inventory checklist with verification columns. Locations have been anonymized.*
-
-## Troubleshooting
-
-If the customizable macOS launcher lacks execute permission, open Terminal in the extracted project folder and run:
-
-```sh
-chmod +x "Chemotion Inventorizer.app/Contents/MacOS/Chemotion Inventorizer"
-```
-
-Then reopen the app.
 
 ## Customization
 
