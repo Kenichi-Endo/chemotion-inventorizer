@@ -17,17 +17,28 @@ Chemotion Inventorizer is a desktop app for viewing, bulk-editing, and printing 
 
 ## Supported environments
 
-- macOS 10.12+ (Intel) or macOS 11+ (Apple Silicon).
+- macOS 11+ (Intel or Apple Silicon).
 - Windows 10+ (64-bit Intel/AMD).
 
 ## Setup
 
+### Standalone app
+
+1. Download the ZIP for your platform from [Releases](https://github.com/Kenichi-Endo/chemotion-inventorizer/releases): **macos-apple-silicon**, **macos-intel**, or **windows-x64**.
+2. Extract the ZIP and open the app.
+3. On macOS, dismiss the verification warning, then open **System Settings → Privacy & Security → Open Anyway** and confirm.
+
+### Customizable launcher
+
 1. Install Python 3.10+, if not installed: [Python for macOS](https://www.python.org/downloads/macos/) or [Python for Windows](https://www.python.org/downloads/windows/). On Windows, select **Add python.exe to PATH** and keep **tcl/tk and IDLE** selected during installation.
 2. Clone the repository or download it using **Code → Download ZIP** and extract it. Keep the project folder intact when moving or sharing the app.
 3. Open `Chemotion Inventorizer.app` on macOS or double-click `Chemotion Inventorizer.cmd` on Windows. Keep an internet connection available during automatic dependency installation. The first launch may take a few minutes.
-4. Enter the Chemotion server root URL (for example, `https://eln.example.org`), your username, and password, then select **Sign in**.
-5. Choose a collection.
-6. Use **Columns** to choose visible columns and **Location** to filter samples. Drag column headings to reorder them, or click a heading to sort.
+
+### Common setup
+
+1. Enter the Chemotion server root URL (for example, `https://eln.example.org`), your username, and password, then select **Sign in**.
+2. Choose a collection.
+3. Use **Columns** to choose visible columns and **Location** to filter samples. Drag column headings to reorder them, or click a heading to sort.
 
 ## Use
 
@@ -44,7 +55,7 @@ Chemotion Inventorizer is a desktop app for viewing, bulk-editing, and printing 
 
 ## Troubleshooting
 
-If macOS reports that the launcher cannot be opened, open Terminal in the extracted project folder and run:
+If the customizable macOS launcher lacks execute permission, open Terminal in the extracted project folder and run:
 
 ```sh
 chmod +x "Chemotion Inventorizer.app/Contents/MacOS/Chemotion Inventorizer"
@@ -52,11 +63,9 @@ chmod +x "Chemotion Inventorizer.app/Contents/MacOS/Chemotion Inventorizer"
 
 Then reopen the app.
 
-If setup fails, check the internet connection and reopen the launcher. Diagnostic logs are in `~/Library/Logs/Chemotion Inventorizer/launcher.log` on macOS or `%LOCALAPPDATA%\Chemotion Inventorizer\Logs\launcher.log` on Windows.
-
 ## Customization
 
-To customize the app, edit the Python files in `src/chemotion_inventorizer/` manually or with a coding agent, then restart the app.
+Edit the Python files in `src/chemotion_inventorizer/` manually or with a coding agent, then restart the customizable launcher.
 
 ## Run from source
 
@@ -83,3 +92,7 @@ Sample information is retrieved over HTTPS and held in memory while the app is o
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
+
+## Diagnostic logs
+
+Customizable launcher logs are in `~/Library/Logs/Chemotion Inventorizer/launcher.log` on macOS or `%LOCALAPPDATA%\Chemotion Inventorizer\Logs\launcher.log` on Windows.

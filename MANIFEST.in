@@ -6,4 +6,5 @@ include .gitignore
 include Chemotion?Inventorizer.cmd
 recursive-include Chemotion?Inventorizer.app *
 recursive-include tests *.py
+recursive-include scripts *.py
 global-exclude .DS_Store *.py[cod]

@@ -24,6 +24,9 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
+standalone = [
+  "pyinstaller>=6.16,<7",
+]
 dev = [
   "pytest>=8",
   "build>=1",

@@ -256,6 +256,25 @@ def structure_image_request_path(source, directory="molecules"):
         return "/" + path
     return f"/images/{directory}/" + quote(path, safe="")
 
+def inverted_structure_png(image_data, width, height):
+    """Invert thumbnail RGB channels while preserving transparency."""
+    import resvg_py
+
+    encoded = base64.b64encode(image_data).decode("ascii")
+    svg = (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}">'
+        '<defs><filter id="invert" color-interpolation-filters="sRGB">'
+        '<feComponentTransfer>'
+        '<feFuncR type="linear" slope="-1" intercept="1"/>'
+        '<feFuncG type="linear" slope="-1" intercept="1"/>'
+        '<feFuncB type="linear" slope="-1" intercept="1"/>'
+        '</feComponentTransfer></filter></defs>'
+        f'<image width="{width}" height="{height}" filter="url(#invert)" '
+        f'href="data:image/png;base64,{encoded}"/></svg>'
+    )
+    return resvg_py.svg_to_bytes(svg_string=svg, width=width, height=height)
+
+
 def parse_last_modified(value):
     """Convert the timestamp returned by Chemotion into a sortable datetime."""
     timestamp = str(value).strip()
@@ -900,6 +919,9 @@ def location_choices(rows):
 class Inventorizer(tk.Tk):
     headings = ("Short label", "Location", "Structure", "Molecule name", "Density", "Sample name", "Vendor", "Amount", "Last modified", "Decoupled", "Inventory")
     keys = ("label", "location", "structure", "molecule", "density", "sample", "vendor", "amount", "last_modified", "decoupled", "inventory_sample")
+    column_menu_order = ("structure", "inventory_sample", "label", "location", "decoupled", "molecule", "density", "sample", "vendor", "amount", "last_modified")
+    default_column_order = ("structure", "inventory_sample", "label", "location", "decoupled", "molecule", "density", "sample", "vendor", "amount", "last_modified")
+    default_visible_columns = tuple(key for key in default_column_order if key != "decoupled")
     column_widths = {"label":120,"structure":85,"molecule":250,"density":100,"sample":200,"vendor":135,"amount":100,"location":260,"last_modified":145,"decoupled":95,"inventory_sample":85}
     column_min_widths = {"label":85,"structure":70,"molecule":120,"density":70,"sample":110,"vendor":90,"amount":70,"location":120,"last_modified":105,"decoupled":70,"inventory_sample":70}
     palettes = {False: {"base":"#f4f7f6","panel":"#ffffff","text":"#17211f","muted":"#52616c","accent":"#08756a","error":"#b42318"}, True: {"base":"#1c1c1e","panel":"#2c2c2e","text":"#f2f2f7","muted":"#aeaeb2","accent":"#41c7b3","error":"#ff6961"}}
@@ -909,8 +931,8 @@ class Inventorizer(tk.Tk):
         super().__init__(); self.title("Chemotion Inventorizer"); self.minsize(1050, 620); self.rows = []; self.selected_row_ids = set(); self.location_filter_retained_row_ids = set(); self.sort_key = "label"; self.sort_reverse = False; self.location_filter = tk.StringVar(value="All locations"); self.collection_value = tk.StringVar(value="Choose collection…"); self.collection_choices = {}; self.logged_in = False; self.profile_settings = saved_profile_settings(); saved_server = self.profile_settings.get("chemotion_server", DEFAULT_CHEMOTION_URL); self.server_value = tk.StringVar(value=saved_server if isinstance(saved_server, str) else DEFAULT_CHEMOTION_URL); self.username_value = tk.StringVar(value=username); self.password_value = tk.StringVar(value=password); self.remember_credentials = tk.BooleanVar(value=True); self.amount_editor = None; self.editing_cell = None; self.edit_after_save = None; self.editing_rows = []; self.inventory_cancel_event = None; self.inventory_loading = False
         try: CHEMOTION_URL = normalized_chemotion_url(self.server_value.get())
         except ValueError: self.server_value.set(DEFAULT_CHEMOTION_URL); CHEMOTION_URL = DEFAULT_CHEMOTION_URL
-        self.column_order = column_order(self.profile_settings.get("column_order"), self.keys)
-        selected_columns = visible_columns(self.profile_settings.get("visible_columns"), self.column_order)
+        self.column_order = column_order(self.profile_settings.get("column_order"), self.default_column_order)
+        selected_columns = visible_columns(self.profile_settings.get("visible_columns", self.default_visible_columns), self.column_order)
         self.column_visibility = {key: tk.BooleanVar(value=key in selected_columns) for key in self.keys}
         self.server_value.trace_add("write", self.connection_details_changed); self.username_value.trace_add("write", self.connection_details_changed); self.password_value.trace_add("write", self.connection_details_changed)
         icon_path = os.environ.get("CHEMOTION_INVENTORIZER_ICON")
@@ -933,10 +955,11 @@ class Inventorizer(tk.Tk):
         self.columns_menu = tk.Menu(self.columns_button, tearoff=False)
         self.columns_button.configure(menu=self.columns_menu); self.columns_button.pack(side="left", padx=4)
         column_labels = dict(zip(self.keys, self.headings))
-        selector_keys = ("structure",) + tuple(key for key in self.keys if key != "structure")
+        selector_keys = self.column_menu_order
         for key in selector_keys: self.columns_menu.add_checkbutton(label=column_labels[key], variable=self.column_visibility[key], command=lambda key=key: self.toggle_column(key))
         ttk.Label(self.location_controls, text="Location:").pack(side="left", padx=(12,0)); self.location_filter_menu = ttk.Combobox(self.location_controls, textvariable=self.location_filter, values=("All locations",), state="readonly", width=18); self.location_filter_menu.pack(side="left", padx=4); self.location_filter_menu.bind("<<ComboboxSelected>>", self.filter_by_location); disable_combobox_scroll_selection(self.location_filter_menu)
         self.print_button = ttk.Button(self.location_controls, text="Print…", command=self.printable, state="disabled"); self.print_button.pack(side="left", padx=4)
+        self.structure_image_variants = {}
         self.structure_images = {}; self.structure_image_pending = set(); self.structure_image_queue = deque(); self.structure_image_queue_lock = threading.Lock(); self.structure_image_worker_active = False; self.structure_image_waiters = {}; self.structure_rows_pending = set()
         frame = ttk.Frame(self, padding=(12, 12, 12, 0), style="Inventory.TFrame"); frame.pack(fill="both", expand=True, padx=24); self.tree = ttk.Treeview(frame, columns=self.keys, displaycolumns=self.displayed_data_column_keys(), show="tree headings" if self.column_visibility["structure"].get() else "headings", style="Inventory.Treeview", selectmode="extended")
         self.tree.bind("<<TreeviewSelect>>", self.remember_selection)
@@ -1001,6 +1024,14 @@ class Inventorizer(tk.Tk):
         row_height = 56 if self.column_visibility["structure"].get() else 34
         self.style.configure("Inventory.TFrame",background=c["base"]); self.style.configure("Inventory.Treeview",background=c["panel"],fieldbackground=c["panel"],foreground=c["text"],rowheight=row_height); self.style.map("Inventory.Treeview",background=[("selected",accent)],foreground=[("selected",contrasting_text_color(accent))]); self.style.configure("Inventory.Treeview.Heading",background=c["base"],foreground=c["text"],font=self.column_header_font)
         self.tree.tag_configure("alternate", background="#38383a" if dark else "#eeeeee")
+        self.refresh_structure_appearance()
+    def refresh_structure_appearance(self):
+        for source, variants in self.structure_image_variants.items():
+            self.structure_images[source] = variants[bool(self.dark_mode)]
+        for row in self.rows:
+            image = self.structure_images.get(row.get("structure"))
+            if image is not None and self.tree.exists(str(row["id"])):
+                self.tree.item(str(row["id"]), image=image)
     def appearance_colors(self, dark):
         """Use the native label surface for the surrounding window as well."""
         colors = self.palettes[dark].copy()
@@ -1436,10 +1467,11 @@ class Inventorizer(tk.Tk):
                     output_width, output_height = max(1, round(50 * aspect_ratio)), 50
                 image_data = resvg_py.svg_to_bytes(svg_string=svg_data.decode("utf-8-sig"),
                                                   width=output_width, height=output_height)
+                dark_image_data = inverted_structure_png(image_data, output_width, output_height)
             except Exception as error:
                 self.after(0, self._structure_image_failed, source, str(error))
             else:
-                self.after(0, self._structure_image_loaded, source, image_data)
+                self.after(0, self._structure_image_loaded, source, image_data, dark_image_data)
     def _structure_image_dependency_missing(self, sources, error):
         self.structure_image_pending.difference_update(sources)
         self.status.configure(
@@ -1448,10 +1480,15 @@ class Inventorizer(tk.Tk):
         )
         for source in sources:
             self._structure_image_finished(source)
-    def _structure_image_loaded(self, source, image_data):
+    def _structure_image_loaded(self, source, image_data, dark_image_data=None):
         self.structure_image_pending.discard(source)
         try:
             image = tk.PhotoImage(data=base64.b64encode(image_data).decode("ascii"), format="png")
+            if dark_image_data is not None:
+                dark_image = tk.PhotoImage(data=base64.b64encode(dark_image_data).decode("ascii"), format="png")
+                self.structure_image_variants[source] = (image, dark_image)
+                if self.dark_mode:
+                    image = dark_image
             self.structure_images[source] = image
             for row in self.rows:
                 if row.get("structure") == source and self.tree.exists(str(row["id"])):
