@@ -31,6 +31,9 @@ def fake_setup(tmp_path, monkeypatch):
             python.touch()
         return SimpleNamespace(returncode=0)
 
+    # Windows platform detection can itself run a subprocess. Keep it outside
+    # the fake environment-setup commands, regardless of platform cache state.
+    monkeypatch.setattr(bootstrap.platform, "machine", lambda: "test-machine")
     monkeypatch.setattr(bootstrap.subprocess, "run", run)
     return root, state, commands
 

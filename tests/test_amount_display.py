@@ -269,11 +269,21 @@ def test_inventory_row_displays_last_modified_in_iso_format():
     assert row["last_modified"] == "2026-09-09 08:30:00"
 
 
-def test_last_modified_display_uses_iso_offset_format():
-    display = app.format_last_modified("2026-09-09T08:30:00+0000")
+@pytest.mark.parametrize("offset", ["+0000", "+0200", "-0530", "+02:00", "Z"])
+def test_last_modified_display_uses_iso_offset_format(offset):
+    display = app.format_last_modified(f"2026-09-09T08:30:00{offset}")
 
     assert " " in display
     assert re.search(r"[+-]\d{2}:\d{2}$", display)
+
+
+@pytest.mark.parametrize("offset, minutes", [("+0000", 0), ("+0200", 120), ("-0530", -330)])
+def test_last_modified_parses_compact_offset_without_changing_instant(offset, minutes):
+    timestamp = app.parse_last_modified(f"2026-09-09T08:30:00{offset}")
+
+    assert timestamp.hour == 8
+    assert timestamp.minute == 30
+    assert timestamp.utcoffset().total_seconds() == minutes * 60
 
 
 def test_last_modified_display_converts_chemotions_localized_timestamp_to_iso():

@@ -259,6 +259,8 @@ def structure_image_request_path(source, directory="molecules"):
 def parse_last_modified(value):
     """Convert the timestamp returned by Chemotion into a sortable datetime."""
     timestamp = str(value).strip()
+    # Python 3.10 requires a colon in numeric UTC offsets.
+    timestamp = re.sub(r"([+-]\d{2})(\d{2})$", r"\1:\2", timestamp)
     try:
         return datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
     except ValueError:
