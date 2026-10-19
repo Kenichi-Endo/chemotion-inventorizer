@@ -1,0 +1,9 @@
+include LICENSE
+include AGENTS.md
+include CONTRIBUTING.md
+include .gitattributes
+include .gitignore
+include Chemotion?Inventorizer.cmd
+recursive-include Chemotion?Inventorizer.app *
+recursive-include tests *.py
+global-exclude .DS_Store *.py[cod]
