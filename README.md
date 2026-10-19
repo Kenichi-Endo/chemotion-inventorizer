@@ -17,8 +17,8 @@ Chemotion Inventorizer is a desktop app for viewing, bulk-editing, and printing 
 
 ## Supported environments
 
-- macOS 10.12 or newer (Intel), or macOS 11 or newer (Apple Silicon).
-- Windows 10 or newer (64-bit Intel/AMD).
+- macOS 10.12+ (Intel) or macOS 11+ (Apple Silicon).
+- Windows 10+ (64-bit Intel/AMD).
 
 ## Setup
 
