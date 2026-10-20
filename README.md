@@ -88,15 +88,17 @@ inventorizer
 
 ## Data handling
 
-Sample information is retrieved over HTTPS and held in memory while the app is open. Saved credentials use Keychain on macOS or Credential Manager on Windows. Server and display preferences are saved separately in the current user's profile:
+Sample information is retrieved over HTTPS and held in memory while the app is open.
+
+With **Remember** enabled, your username and password are saved locally in macOS Keychain or Windows Credential Manager under `io.github.kenichi-endo.chemotion-inventorizer`.
+
+Server and display preferences are saved separately in the current user's profile:
 
 - macOS: `~/Library/Application Support/Chemotion Inventorizer/settings.json`
 - Windows: `%APPDATA%\Chemotion Inventorizer\settings.json`
 
+Customizable launcher logs are in `~/Library/Logs/Chemotion Inventorizer/launcher.log` on macOS or `%LOCALAPPDATA%\Chemotion Inventorizer\Logs\launcher.log` on Windows.
+
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
-
-## Diagnostic logs
-
-Customizable launcher logs are in `~/Library/Logs/Chemotion Inventorizer/launcher.log` on macOS or `%LOCALAPPDATA%\Chemotion Inventorizer\Logs\launcher.log` on Windows.

@@ -47,7 +47,7 @@ def build():
     if sys.platform == "darwin":
         command.extend([
             "--icon", str(RESOURCES / "ChemotionInventorizer.icns"),
-            "--osx-bundle-identifier", "de.endo-group.chemotion-inventorizer",
+            "--osx-bundle-identifier", "io.github.kenichi-endo.chemotion-inventorizer",
             "--target-arch", platform.machine(),
         ])
         # Universal Python otherwise starts native Apple Silicon subprocesses

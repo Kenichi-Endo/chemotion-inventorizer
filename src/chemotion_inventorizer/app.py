@@ -29,7 +29,7 @@ DEFAULT_CHEMOTION_URL = "https://"
 CHEMOTION_URL = DEFAULT_CHEMOTION_URL
 CHEMOTION_USERNAME = ""
 CHEMOTION_PASSWORD = ""
-KEYCHAIN_SERVICE = "de.endo-group.chemotion-inventorizer"
+KEYCHAIN_SERVICE = "io.github.kenichi-endo.chemotion-inventorizer"
 WINDOWS_CREDENTIAL_TARGET = KEYCHAIN_SERVICE
 
 

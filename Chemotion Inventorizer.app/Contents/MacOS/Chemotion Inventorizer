@@ -32,8 +32,7 @@ if [ -z "$python" ]; then
     exit 1
 fi
 
-# The bootstrap installs project dependencies into a private environment, using
-# the same project/version/architecture isolation as PXRD Studio.
+# The bootstrap installs project dependencies into a private environment.
 log_dir="$HOME/Library/Logs/Chemotion Inventorizer"
 mkdir -p "$log_dir" || exit 1
 log_file="$log_dir/launcher.log"
