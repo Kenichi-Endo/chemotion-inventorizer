@@ -50,11 +50,13 @@ If macOS says **“Chemotion Inventorizer.app” cannot be opened**:
 
 1. Enter the Chemotion server root URL (for example, `https://eln.example.org`), your username, and password, then select **Sign in**.
 2. Choose a collection.
-3. Use **Columns** to choose visible columns and **Location** to filter samples. Drag column headings to reorder them, or click a heading to sort.
+3. Use **Columns** to choose visible columns. Drag column headings to reorder them, or click a heading to sort.
+4. Adjust **Font size** and **Structure size**.
 
 ## Use
 
-- Press Esc to stop loading samples and keep those already retrieved.
+- Press Esc to stop loading samples.
+- Select **Location** to filter by location.
 - Click a cell to edit it. An existing location can be chosen from the dropdown. Include a unit with amounts, such as `250 mg`. Press Return/Enter to save directly to Chemotion or Esc to cancel. Move to the next cell with Enter, Shift+Enter, Tab, or  Shift+Tab.
 - Use Command/Ctrl-click to select multiple samples, or Shift-click to select a range. Edit a cell in the selection to apply the value to all selected visible rows.
 - Double-click a structure or short label to open the sample in your browser.

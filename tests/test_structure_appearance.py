@@ -57,3 +57,42 @@ def test_switching_theme_reuses_images_and_keeps_stopped_rows():
     assert assigned == [inverted, normal]
     assert viewer.rows is rows
     assert viewer.structure_images["molecule.svg"] is normal
+
+
+@pytest.mark.parametrize("value, expected", [("100", 100), ("20", 20), ("200", 200),
+                                           ("", None), ("19", None), ("201", None)])
+def test_structure_size_updates_cached_images_and_profile(value, expected, monkeypatch):
+    saved, rendered, columns = [], [], []
+    monkeypatch.setattr(app, "save_profile_settings", lambda settings: saved.append(dict(settings)))
+    viewer = SimpleNamespace(
+        structure_size=50, structure_size_value=SimpleNamespace(get=lambda: value),
+        structure_svg_data={"molecule.svg": b"svg"},
+        column_visibility={"structure": SimpleNamespace(get=lambda: True)},
+        tree=SimpleNamespace(column=lambda *args, **kwargs: columns.append(kwargs)),
+        style=SimpleNamespace(configure=lambda *args, **kwargs: None),
+        table_row_height=lambda: 106,
+        _structure_image_loaded=lambda *args: rendered.append(args), profile_settings={},
+    )
+    app.Inventorizer.change_structure_size(viewer)
+    assert viewer.structure_size == (expected or 50)
+    assert saved == ([{"structure_size": expected}] if expected else [])
+    assert rendered == ([("molecule.svg", b"svg")] if expected else [])
+    assert columns == ([{"width": round(expected * 1.5) + 10,
+                         "minwidth": round(expected * 1.5) + 10}] if expected else [])
+
+
+def test_resizing_renders_cached_svg_at_current_size(monkeypatch):
+    images = []
+    monkeypatch.setattr(app.tk, "PhotoImage", lambda **kwargs: images.append(kwargs) or object())
+    viewer = SimpleNamespace(
+        structure_size=100, structure_image_pending=set(),
+        structure_svg_data={"source": b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 75 50"/>'},
+        structure_image_variants={}, structure_images={}, rows=[], dark_mode=False,
+        _structure_image_finished=lambda source: None,
+        _structure_image_failed=lambda *args: pytest.fail(str(args)),
+    )
+    app.Inventorizer._structure_image_loaded(viewer, "source", b"ignored")
+    png = app.base64.b64decode(images[0]["data"])
+    assert int.from_bytes(png[16:20], "big") == 150
+    assert int.from_bytes(png[20:24], "big") == 100
+    assert len(images) == 2

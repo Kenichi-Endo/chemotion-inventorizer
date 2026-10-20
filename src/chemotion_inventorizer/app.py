@@ -946,7 +946,16 @@ class Inventorizer(tk.Tk):
             self.iconphoto(True, self.app_icon)
         self.dark_mode = system_dark_mode(); self.style = ttk.Style(self); self.colors = self.appearance_colors(self.dark_mode)
         self.sample_list_font = tkfont.nametofont("TkDefaultFont").copy()
-        self.sample_list_font.configure(size=18)
+        saved_font_size = self.profile_settings.get("table_font_size", 18)
+        if type(saved_font_size) is not int or not 8 <= saved_font_size <= 48:
+            saved_font_size = 18
+        self.sample_list_font.configure(size=saved_font_size)
+        self.font_size_value = tk.StringVar(value=str(saved_font_size))
+        self.structure_size = self.profile_settings.get("structure_size", 50)
+        if type(self.structure_size) is not int or not 20 <= self.structure_size <= 200:
+            self.structure_size = 50
+        self.structure_size_value = tk.StringVar(value=str(self.structure_size))
+        self.structure_svg_data = {}
         self.column_header_font = tkfont.nametofont("TkDefaultFont").copy()
         self.column_header_font.configure(size=12)
         self.minsize(*minimum_window_size(self.winfo_screenwidth(), self.winfo_screenheight()))
@@ -962,6 +971,18 @@ class Inventorizer(tk.Tk):
         self.columns_button = ttk.Menubutton(self.location_controls, text="Columns")
         self.columns_menu = tk.Menu(self.columns_button, tearoff=False)
         self.columns_button.configure(menu=self.columns_menu); self.columns_button.pack(side="left", padx=4)
+        ttk.Label(self.location_controls, text="Structure size:").pack(side="left", padx=(12, 0))
+        self.structure_size_spinbox = ttk.Spinbox(self.location_controls, from_=20, to=200,
+                                                 textvariable=self.structure_size_value, width=3)
+        self.structure_size_spinbox.pack(side="left", padx=4)
+        self.structure_size_spinbox.bind("<Return>", self.finish_structure_size_edit)
+        self.structure_size_spinbox.bind("<FocusOut>", self.finish_structure_size_edit)
+        ttk.Label(self.location_controls, text="Font size:").pack(side="left", padx=(12, 0))
+        self.font_size_spinbox = ttk.Spinbox(self.location_controls, from_=8, to=48,
+                                             textvariable=self.font_size_value, width=3)
+        self.font_size_spinbox.pack(side="left", padx=4)
+        self.font_size_spinbox.bind("<Return>", self.finish_font_size_edit)
+        self.font_size_spinbox.bind("<FocusOut>", self.finish_font_size_edit)
         column_labels = dict(zip(self.keys, self.headings))
         selector_keys = self.column_menu_order
         for key in selector_keys: self.columns_menu.add_checkbutton(label=column_labels[key], variable=self.column_visibility[key], command=lambda key=key: self.toggle_column(key))
@@ -987,10 +1008,12 @@ class Inventorizer(tk.Tk):
         # second time on a normal click.
         for heading, key in zip(self.headings, self.keys): self.tree.heading(key, text=heading)
         self.tree.heading("#0", text="Structure" if self.column_visibility["structure"].get() else "")
-        self.tree.column("#0", width=85 if self.column_visibility["structure"].get() else 0,
-                         minwidth=70 if self.column_visibility["structure"].get() else 0,
+        self.tree.column("#0", width=round(self.structure_size * 1.5) + 10 if self.column_visibility["structure"].get() else 0,
+                         minwidth=round(self.structure_size * 1.5) + 10 if self.column_visibility["structure"].get() else 0,
                          stretch=False, anchor="center")
-        self.style.configure("Inventory.Treeview", font=self.sample_list_font, rowheight=56 if self.column_visibility["structure"].get() else 34, indent=0, imageanchor="center")
+        self.style.configure("Inventory.Treeview", font=self.sample_list_font, rowheight=self.table_row_height(), indent=0, imageanchor="center")
+        self.font_size_value.trace_add("write", self.change_font_size)
+        self.structure_size_value.trace_add("write", self.change_structure_size)
         # The native tree layout reserves space for an expander and left-aligns
         # item images, independently of the column's text anchor. Tk 9 also
         # needs imageanchor above because it overrides the layout's sticky.
@@ -1029,7 +1052,7 @@ class Inventorizer(tk.Tk):
         for item in (self.top, self.status_area, self.controls, self.login_controls, self.location_controls, self.progress_area): item.configure(bg=c["base"])
         self.status.configure(bg=c["base"])
         self.style.configure("Inventory.Horizontal.TProgressbar", background=accent, troughcolor=c["panel"])
-        row_height = 56 if self.column_visibility["structure"].get() else 34
+        row_height = self.table_row_height()
         self.style.configure("Inventory.TFrame",background=c["base"]); self.style.configure("Inventory.Treeview",background=c["panel"],fieldbackground=c["panel"],foreground=c["text"],rowheight=row_height); self.style.map("Inventory.Treeview",background=[("selected",accent)],foreground=[("selected",contrasting_text_color(accent))]); self.style.configure("Inventory.Treeview.Heading",background=c["base"],foreground=c["text"],font=self.column_header_font)
         self.tree.tag_configure("alternate", background="#38383a" if dark else "#eeeeee")
         self.refresh_structure_appearance()
@@ -1055,10 +1078,44 @@ class Inventorizer(tk.Tk):
         self.tree.configure(displaycolumns=self.displayed_data_column_keys(),
                             show="tree headings" if structure_visible else "headings")
         self.tree.heading("#0", text="Structure" if structure_visible else "")
-        self.tree.column("#0", width=85 if structure_visible else 0,
-                         minwidth=70 if structure_visible else 0,
+        self.tree.column("#0", width=round(self.structure_size * 1.5) + 10 if structure_visible else 0,
+                         minwidth=round(self.structure_size * 1.5) + 10 if structure_visible else 0,
                          stretch=False, anchor="center")
-        self.style.configure("Inventory.Treeview", rowheight=56 if structure_visible else 34)
+        self.style.configure("Inventory.Treeview", rowheight=self.table_row_height())
+    def table_row_height(self):
+        return max(self.structure_size + 6 if self.column_visibility["structure"].get() else 34,
+                   self.sample_list_font.metrics("linespace") + 10)
+    def change_structure_size(self, *_args):
+        try:
+            size = int(self.structure_size_value.get())
+        except ValueError:
+            return
+        if not 20 <= size <= 200 or size == self.structure_size:
+            return
+        self.structure_size = size
+        if self.column_visibility["structure"].get():
+            self.tree.column("#0", width=round(size * 1.5) + 10,
+                             minwidth=round(size * 1.5) + 10)
+        self.style.configure("Inventory.Treeview", rowheight=self.table_row_height())
+        for source, svg_data in list(self.structure_svg_data.items()):
+            self._structure_image_loaded(source, svg_data)
+        self.profile_settings["structure_size"] = size
+        save_profile_settings(self.profile_settings)
+    def finish_structure_size_edit(self, _event=None):
+        self.structure_size_value.set(str(self.structure_size))
+    def change_font_size(self, *_args):
+        try:
+            size = int(self.font_size_value.get())
+        except ValueError:
+            return
+        if not 8 <= size <= 48:
+            return
+        self.sample_list_font.configure(size=size)
+        self.style.configure("Inventory.Treeview", rowheight=self.table_row_height())
+        self.profile_settings["table_font_size"] = size
+        save_profile_settings(self.profile_settings)
+    def finish_font_size_edit(self, _event=None):
+        self.font_size_value.set(str(self.sample_list_font.cget("size")))
     def toggle_column(self, key):
         if not self.visible_column_keys():
             self.column_visibility[key].set(True)
@@ -1132,7 +1189,7 @@ class Inventorizer(tk.Tk):
         visible = self.displayed_data_column_keys()
         available_width = self.tree.winfo_width() - 2
         if self.column_visibility["structure"].get():
-            available_width -= self.column_widths["structure"]
+            available_width -= self.tree.column("#0", "width")
         if not visible or available_width <= 1:
             return
         preferred_width = sum(self.column_widths[key] for key in visible)
@@ -1469,17 +1526,19 @@ class Inventorizer(tk.Tk):
                     width_value = float(width.group(1)) if width else 1.0
                     height_value = float(height.group(1)) if height else 1.0
                     aspect_ratio = width_value / height_value if height_value > 0 else 1.0
+                size = self.structure_size
                 if aspect_ratio >= 75 / 50:
-                    output_width, output_height = 75, max(1, round(75 / aspect_ratio))
+                    output_width, output_height = round(size * 1.5), max(1, round(size * 1.5 / aspect_ratio))
                 else:
-                    output_width, output_height = max(1, round(50 * aspect_ratio)), 50
+                    output_width, output_height = max(1, round(size * aspect_ratio)), size
                 image_data = resvg_py.svg_to_bytes(svg_string=svg_data.decode("utf-8-sig"),
                                                   width=output_width, height=output_height)
                 dark_image_data = inverted_structure_png(image_data, output_width, output_height)
             except Exception as error:
                 self.after(0, self._structure_image_failed, source, str(error))
             else:
-                self.after(0, self._structure_image_loaded, source, image_data, dark_image_data)
+                self.after(0, self._structure_image_loaded, source, image_data, dark_image_data,
+                           svg_data, size)
     def _structure_image_dependency_missing(self, sources, error):
         self.structure_image_pending.difference_update(sources)
         self.status.configure(
@@ -1488,9 +1547,21 @@ class Inventorizer(tk.Tk):
         )
         for source in sources:
             self._structure_image_finished(source)
-    def _structure_image_loaded(self, source, image_data, dark_image_data=None):
+    def _structure_image_loaded(self, source, image_data, dark_image_data=None, svg_data=None, rendered_size=None):
         self.structure_image_pending.discard(source)
         try:
+            if svg_data is not None:
+                self.structure_svg_data[source] = svg_data
+            if source in getattr(self, "structure_svg_data", {}) and rendered_size != self.structure_size:
+                import resvg_py
+                svg = self.structure_svg_data[source].decode("utf-8-sig")
+                # Re-render the vector source so enlarging a thumbnail stays sharp.
+                image_data = resvg_py.svg_to_bytes(svg_string=svg,
+                                                   width=round(self.structure_size * 1.5),
+                                                   height=self.structure_size)
+                dark_image_data = inverted_structure_png(image_data,
+                                                          round(self.structure_size * 1.5),
+                                                          self.structure_size)
             image = tk.PhotoImage(data=base64.b64encode(image_data).decode("ascii"), format="png")
             if dark_image_data is not None:
                 dark_image = tk.PhotoImage(data=base64.b64encode(dark_image_data).decode("ascii"), format="png")
