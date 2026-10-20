@@ -27,6 +27,7 @@ Chemotion Inventorizer is a desktop app for viewing, bulk-editing, and printing 
 1. Download the ZIP for your platform from [Releases](https://github.com/Kenichi-Endo/chemotion-inventorizer/releases): **macos-apple-silicon**, **macos-intel**, or **windows-x64**.
 2. Extract the ZIP and open the app.
 3. On macOS, dismiss the verification warning, then open **System Settings → Privacy & Security → Open Anyway** and confirm.
+4. On Windows, when **Windows protected your PC** appears, select **More info → Run anyway**.
 
 ### Customizable launcher
 
