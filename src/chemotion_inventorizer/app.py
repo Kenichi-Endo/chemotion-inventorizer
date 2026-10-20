@@ -38,6 +38,11 @@ def multi_selection_modifier(windowing_system):
     return "Command" if windowing_system == "aqua" else "Control"
 
 
+def minimum_window_size(screen_width, screen_height):
+    """Leave room for window decorations and the taskbar on small displays."""
+    return min(1050, max(320, screen_width - 80)), min(620, max(240, screen_height - 160))
+
+
 def prevent_combobox_scroll_selection(_event=None):
     """Keep the focused combobox value unchanged while the user scrolls."""
     return "break"
@@ -944,7 +949,10 @@ class Inventorizer(tk.Tk):
         self.sample_list_font.configure(size=18)
         self.column_header_font = tkfont.nametofont("TkDefaultFont").copy()
         self.column_header_font.configure(size=12)
-        self.top = tk.Frame(self, padx=24, pady=18); self.top.pack(fill="x")
+        self.minsize(*minimum_window_size(self.winfo_screenwidth(), self.winfo_screenheight()))
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(1, weight=1)
+        self.top = tk.Frame(self, padx=24, pady=18); self.top.grid(row=0, column=0, sticky="ew")
         self.controls = tk.Frame(self.top); self.controls.pack(anchor="w", pady=(8, 0))
         self.login_controls = tk.Frame(self.controls); self.login_controls.pack(anchor="w")
         self.location_controls = tk.Frame(self.controls); self.location_controls.pack(anchor="w", pady=(6, 0))
@@ -961,7 +969,7 @@ class Inventorizer(tk.Tk):
         self.print_button = ttk.Button(self.location_controls, text="Print…", command=self.printable, state="disabled"); self.print_button.pack(side="left", padx=4)
         self.structure_image_variants = {}
         self.structure_images = {}; self.structure_image_pending = set(); self.structure_image_queue = deque(); self.structure_image_queue_lock = threading.Lock(); self.structure_image_worker_active = False; self.structure_image_waiters = {}; self.structure_rows_pending = set()
-        frame = ttk.Frame(self, padding=(12, 12, 12, 0), style="Inventory.TFrame"); frame.pack(fill="both", expand=True, padx=24); self.tree = ttk.Treeview(frame, columns=self.keys, displaycolumns=self.displayed_data_column_keys(), show="tree headings" if self.column_visibility["structure"].get() else "headings", style="Inventory.Treeview", selectmode="extended")
+        frame = ttk.Frame(self, padding=(12, 12, 12, 0), style="Inventory.TFrame"); frame.grid(row=1, column=0, sticky="nsew", padx=24); self.tree = ttk.Treeview(frame, columns=self.keys, displaycolumns=self.displayed_data_column_keys(), show="tree headings" if self.column_visibility["structure"].get() else "headings", style="Inventory.Treeview", selectmode="extended")
         self.tree.bind("<<TreeviewSelect>>", self.remember_selection)
         self.tree.bind("<Command-a>", self.select_all_visible)
         self.tree.bind("<Delete>", self.delete_selected_row)
@@ -995,7 +1003,7 @@ class Inventorizer(tk.Tk):
         for key, width in self.column_widths.items(): self.tree.column(key, width=width, minwidth=self.column_min_widths[key], anchor="center" if key in {"decoupled", "inventory_sample"} else "w")
         vertical = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview); horizontal = ttk.Scrollbar(frame, orient="horizontal", command=self.tree.xview); self.vertical_scrollbar = vertical; self.horizontal_scrollbar = horizontal; self.tree.configure(yscrollcommand=self.tree_yview_changed, xscrollcommand=self.tree_xview_changed)
         self.tree.grid(row=0,column=0,sticky="nsew"); vertical.grid(row=0,column=1,sticky="ns"); horizontal.grid(row=1,column=0,sticky="ew"); frame.columnconfigure(0,weight=1); frame.rowconfigure(0,weight=1)
-        self.progress_area = tk.Frame(self, padx=24); self.progress_area.pack(fill="x", pady=(0, 18))
+        self.progress_area = tk.Frame(self, padx=24); self.progress_area.grid(row=2, column=0, sticky="ew", pady=(0, 18))
         self.status_area = tk.Frame(self.progress_area); self.status_area.pack(side="left", padx=(0, 12))
         self.status = StatusLabel(self.status_area, text="0 samples"); self.status.pack(anchor="w")
         self.progress = ttk.Progressbar(self.progress_area, mode="determinate", maximum=100, style="Inventory.Horizontal.TProgressbar")
