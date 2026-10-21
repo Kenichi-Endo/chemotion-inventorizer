@@ -74,21 +74,6 @@ If macOS says **“Chemotion Inventorizer.app” cannot be opened**:
 
 Edit the Python files in `src/chemotion_inventorizer/` manually or with a coding agent, then restart the customizable launcher.
 
-## Run from source
-
-```sh
-python3 src/chemotion_inventorizer/bootstrap.py
-```
-
-### Install as a command (macOS)
-
-```sh
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .
-inventorizer
-```
-
 ## Data handling
 
 Sample information is retrieved over HTTPS and held in memory while the app is open.
