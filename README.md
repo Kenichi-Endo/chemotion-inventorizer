@@ -22,6 +22,9 @@ Chemotion Inventorizer is a desktop app for viewing, bulk-editing, and printing 
 
 ## Setup
 
+- **Standalone app:** Ready to use without installing Python.
+- **Customizable launcher:** Runs the editable Python source and requires Python 3.10+. Choose this option to customize the app.
+
 ### Standalone app
 
 1. Download the ZIP for your platform from [Releases](https://github.com/Kenichi-Endo/chemotion-inventorizer/releases): **macos-apple-silicon**, **macos-intel**, or **windows-x64**.
