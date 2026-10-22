@@ -1520,7 +1520,10 @@ class Inventorizer(tk.Tk):
         if self.location_filter.get() not in choices: self.location_filter.set("All locations")
     def filter_by_location(self, _event=None):
         self.location_filter_retained_row_ids.clear()
-        self.selected_row_ids.clear()
+        visible_ids = {str(row["id"]) for row in self.filtered_rows()}
+        selected_ids = set(self.tree.selection()) & visible_ids
+        self.tree.selection_set(tuple(selected_ids))
+        self.selected_row_ids = selected_ids
         self.render_rows(); count = len(self.filtered_rows())
         if self.column_visibility["structure"].get() and not self.inventory_loading:
             self.load_structure_images(self.filtered_rows())

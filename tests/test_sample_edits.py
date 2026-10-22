@@ -7,6 +7,25 @@ import pytest
 from test_amount_display import app
 
 
+def test_location_filter_deselects_hidden_samples_without_restoring_them():
+    selection = {"1", "2"}
+    visible = [{"id": 1}]
+    viewer = SimpleNamespace(
+        location_filter_retained_row_ids={2}, selected_row_ids={"1", "2"},
+        tree=SimpleNamespace(selection=lambda: tuple(selection),
+                             selection_set=lambda ids: (selection.clear(), selection.update(ids))),
+        filtered_rows=lambda: visible, render_rows=lambda: None,
+        column_visibility={"structure": SimpleNamespace(get=lambda: False)},
+        status=SimpleNamespace(configure=lambda **kwargs: None), colors={"muted": "gray"},
+    )
+    app.Inventorizer.filter_by_location(viewer)
+    assert selection == viewer.selected_row_ids == {"1"}
+    assert not viewer.location_filter_retained_row_ids
+    visible.append({"id": 2})
+    app.Inventorizer.filter_by_location(viewer)
+    assert selection == viewer.selected_row_ids == {"1"}
+
+
 @pytest.mark.parametrize("failure", [False, True])
 def test_opened_sample_refresh_fetches_current_record(monkeypatch, failure):
     row = {"id": 2, "label": "Sample", "collection_id": 7, "synchronized": True}
