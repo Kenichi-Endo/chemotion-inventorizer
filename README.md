@@ -14,6 +14,7 @@ Chemotion Inventorizer is a desktop app for viewing, bulk-editing, and printing 
 - Remove samples from a collection without deleting them from Chemotion.
 - Open samples in Chemotion for further inspection.
 - Create A4 PDF checklists for inventory verification.
+- Export collections as ZIP archives.
 
 ## Supported environments
 
@@ -50,21 +51,21 @@ If macOS says **“Chemotion Inventorizer.app” cannot be opened**:
 3. Reopen the app.
 
 ### Common setup
-
 1. Enter the Chemotion server root URL (for example, `https://eln.example.org`), your username, and password, then select **Sign in**.
 2. Choose a collection.
 3. Use **Columns** to choose visible columns. Drag column headings to reorder them, or click a heading to sort.
 4. Adjust **Font size** and **Structure size**.
 
 ## Use
-
-- Press Esc to stop loading samples.
-- Select **Location** to filter by location.
-- Click a cell to edit it. An existing location can be chosen from the dropdown. Include a unit with amounts, such as `250 mg`. Press Return/Enter to save directly to Chemotion or Esc to cancel. Move to the next cell with Enter, Shift+Enter, Tab, or  Shift+Tab.
-- Use Command/Ctrl-click to select multiple samples, or Shift-click to select a range. Edit a cell in the selection to apply the value to all selected visible rows.
-- Double-click a structure or short label to open the sample in your browser.
-- Select a sample and press Delete to remove it from the current collection after confirmation. The sample remains in Chemotion and in its other collections.
-- Click **Print…** to create an A4 inventory checklist. Choose the columns and their order, page grouping, and optional **Correct** and **Incorrect** check columns. Printing includes all loaded samples, regardless of the filter or selection. On macOS, confirm in the print dialog. On Windows, use the print command in the PDF app that opens.
+- Launch the app.
+- If you need only the newest samples, press Esc to stop loading samples.
+- To filter entries by location, select **Location**.
+- To edit one sample, click a cell. For **Location**, an existing location can be chosen from the dropdown. For **Amount**, include a unit such as `250 mg`. Press (Shift+)Return/Enter or Tab to save directly to Chemotion and move to the next cell, or Esc to cancel.
+- To edit multiple samples, use Command/Ctrl-click to select multiple samples, or Shift-click to select a range. Edit a cell in the selection to apply the value to all selected rows.
+- To check or edit a sample in Chemotion, double-click a structure or short label.
+- To remove a sample from the collection, press Delete key.
+- To check the inventory, click **Print…** to create an A4 checklist. Choose the columns and their order, page grouping, and optional **Correct** and **Incorrect** check columns. Printing includes all loaded samples, regardless of the filter.
+- To export a collection, click **Export collection…**. You can continue working while **Export queued** is shown; keep the app open until the completion dialog appears. This can be useful as a backup. Synchronized collections cannot be exported.
 
 ![Inventory verification checklist with anonymized locations](docs/images/checklist-anonymized.png)
 

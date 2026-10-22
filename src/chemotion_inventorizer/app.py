@@ -11,6 +11,8 @@ import threading
 import time
 import webbrowser
 import base64
+import io
+import zipfile
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from datetime import datetime
@@ -23,7 +25,7 @@ from urllib.parse import urlsplit
 from urllib.request import HTTPCookieProcessor, HTTPSHandler, Request, build_opener
 import tkinter as tk
 import tkinter.font as tkfont
-from tkinter import messagebox, ttk
+from tkinter import filedialog, messagebox, ttk
 
 DEFAULT_CHEMOTION_URL = "https://"
 CHEMOTION_URL = DEFAULT_CHEMOTION_URL
@@ -617,6 +619,62 @@ class ChemotionClient:
         if not token: raise ConnectionError("Chemotion did not provide a login security token.")
         body = urlencode({"user[login]": CHEMOTION_USERNAME, "user[password]": CHEMOTION_PASSWORD, "user[remember_me]": "0"}).encode()
         self.request("/users/sign_in", body, {"Accept": "text/html", "Content-Type": "application/x-www-form-urlencoded", "X-CSRF-Token": token.group(1)})
+    def export_collection(self, collection, destination, timeout=900, queued=None):
+        """Wait for a new export notification and save its ZIP atomically."""
+        def messages():
+            payload = json.loads(self.request("/api/v1/messages/list?is_ack=9"))
+            return payload.get("messages") or []
+
+        previous = {str(item.get("message_id", item.get("id"))) for item in messages()}
+        headers = {"Accept": "application/json", "Content-Type": "application/json"}
+        try:
+            self.request("/api/v1/collections/export",
+                         json.dumps({"collection_ids": [collection["id"]]}).encode(),
+                         headers, method="POST")
+        except ConnectionError as error:
+            # Chemotion 2.x/3.x uses the plural route and different parameters.
+            if not isinstance(error.__cause__, HTTPError) or error.__cause__.code != 404:
+                raise
+            self.request("/api/v1/collections/exports",
+                         json.dumps({"collections": [collection["id"]], "format": "zip", "nested": False}).encode(),
+                         headers, method="POST")
+        if queued:
+            queued()
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            for item in messages():
+                if str(item.get("message_id", item.get("id"))) in previous:
+                    continue
+                content = as_dict(item.get("content"))
+                data = str(content.get("data") or "")
+                if str(collection["label"]) not in data or "Export" not in data:
+                    continue
+                if item.get("subject") == "Collection Import and Export Failure":
+                    raise ConnectionError("Chemotion could not export this collection.")
+                if item.get("subject") != "Collection Import and Export":
+                    continue
+                link = content.get("url") or ""
+                parsed = urlsplit(link)
+                server = urlsplit(CHEMOTION_URL)
+                if (parsed.netloc and (parsed.scheme, parsed.netloc) != (server.scheme, server.netloc)) or not re.fullmatch(r"/zip/[\w-]+\.zip", parsed.path):
+                    raise ConnectionError("Chemotion returned an unexpected export download link.")
+                archive = self.request(link)
+                if not zipfile.is_zipfile(io.BytesIO(archive)):
+                    raise ConnectionError("Chemotion did not return a ZIP archive.")
+                destination = Path(destination)
+                temporary = None
+                try:
+                    with tempfile.NamedTemporaryFile(dir=destination.parent, suffix=".part", delete=False) as output:
+                        temporary = Path(output.name)
+                        output.write(archive)
+                    temporary.replace(destination)
+                finally:
+                    if temporary is not None:
+                        temporary.unlink(missing_ok=True)
+                return
+            time.sleep(3)
+        raise TimeoutError("The export is still pending. Check Chemotion notifications for its download link.")
+
     def collections(self):
         """Return normal (editable) collection records available to this account."""
         records = []
@@ -988,6 +1046,11 @@ class Inventorizer(tk.Tk):
         for key in selector_keys: self.columns_menu.add_checkbutton(label=column_labels[key], variable=self.column_visibility[key], command=lambda key=key: self.toggle_column(key))
         ttk.Label(self.location_controls, text="Location:").pack(side="left", padx=(12,0)); self.location_filter_menu = ttk.Combobox(self.location_controls, textvariable=self.location_filter, values=("All locations",), state="readonly", width=18); self.location_filter_menu.pack(side="left", padx=4); self.location_filter_menu.bind("<<ComboboxSelected>>", self.filter_by_location); disable_combobox_scroll_selection(self.location_filter_menu)
         self.print_button = ttk.Button(self.location_controls, text="Print…", command=self.printable, state="disabled"); self.print_button.pack(side="left", padx=4)
+        self.export_button = ttk.Button(self.location_controls, text="Export collection…", command=self.export_collection, state="disabled")
+        self.export_button.pack(side="left", padx=4)
+        self.export_status = ttk.Label(self.location_controls, text="")
+        self.export_status.pack(side="left", padx=4)
+        self.queued_exports = 0
         self.structure_image_variants = {}
         self.structure_images = {}; self.structure_image_pending = set(); self.structure_image_queue = deque(); self.structure_image_queue_lock = threading.Lock(); self.structure_image_worker_active = False; self.structure_image_waiters = {}; self.structure_rows_pending = set()
         frame = ttk.Frame(self, padding=(12, 12, 12, 0), style="Inventory.TFrame"); frame.grid(row=1, column=0, sticky="nsew", padx=24); self.tree = ttk.Treeview(frame, columns=self.keys, displaycolumns=self.displayed_data_column_keys(), show="tree headings" if self.column_visibility["structure"].get() else "headings", style="Inventory.Treeview", selectmode="extended")
@@ -1304,6 +1367,44 @@ class Inventorizer(tk.Tk):
             self.status.configure(text="Choose a collection to retrieve its inventory.", fg=self.colors["muted"])
     def _collections_failed(self, error):
         self.set_controls_busy(False); self.status.configure(text="Chemotion collections could not be retrieved.",fg=self.colors["error"]); messagebox.showerror("Chemotion Inventorizer", error)
+    def export_collection(self):
+        collection = self.collection_choices.get(self.collection_value.get())
+        if not collection or collection.get("_synchronized"):
+            return
+        filename = datetime.now().strftime("%y%m%d") + ".zip"
+        destination = filedialog.asksaveasfilename(parent=self, title="Export collection", initialfile=filename, defaultextension=".zip", filetypes=[("ZIP archive", "*.zip")])
+        if not destination:
+            return
+        threading.Thread(target=self._export_collection, args=(dict(collection), destination), daemon=True).start()
+
+    def _export_collection(self, collection, destination):
+        error = None
+        queued = False
+        def export_queued():
+            nonlocal queued
+            queued = True
+            self.after(0, self._export_queued)
+        try:
+            client = ChemotionClient()
+            client.login()
+            client.export_collection(collection, destination, queued=export_queued)
+        except Exception as exception:
+            error = str(exception)
+        self.after(0, self._collection_exported, destination, error, queued)
+
+    def _export_queued(self):
+        self.queued_exports += 1
+        self.export_status.configure(text="Export queued")
+
+    def _collection_exported(self, destination, error, queued=False):
+        if queued:
+            self.queued_exports -= 1
+        self.export_status.configure(text="Export queued" if self.queued_exports else "")
+        if error:
+            messagebox.showerror("Collection export", error)
+        else:
+            messagebox.showinfo("Collection export", f"Download completed.\n\n{destination}")
+
     def load_selected_collection(self, _event=None): self.refresh()
     def refresh(self):
         if self.collection_value.get() not in self.collection_choices:
@@ -1397,6 +1498,8 @@ class Inventorizer(tk.Tk):
         self.inventory_loading = False
         self.hide_progress(); self.status.configure(text="The Chemotion inventory could not be retrieved.",fg=self.colors["error"]); self.set_controls_busy(False); messagebox.showerror("Chemotion Inventorizer",error)
     def set_controls_busy(self, busy):
+        collection = self.collection_choices.get(self.collection_value.get())
+        self.export_button.configure(state="normal" if not busy and self.logged_in and collection and not collection.get("_synchronized") else "disabled")
         self.refresh_button.configure(state="disabled" if busy else "normal")
         self.cancel_load_button.configure(state="normal" if busy and self.inventory_loading else "disabled")
         self.login_button.configure(state="disabled" if busy or self.logged_in else "normal")
