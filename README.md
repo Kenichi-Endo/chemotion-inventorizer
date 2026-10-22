@@ -64,7 +64,7 @@ If macOS says **“Chemotion Inventorizer.app” cannot be opened**:
 - To edit multiple samples, use Command/Ctrl-click to select multiple samples, or Shift-click to select a range. Edit a cell in the selection to apply the value to all selected rows.
 - To check or edit a sample in Chemotion, double-click a structure or short label.
 - To remove a sample from the collection, press Delete key.
-- To check the inventory, click **Print…** to create an A4 checklist. Choose the columns and their order, page grouping, and optional **Correct** and **Incorrect** check columns. Printing includes all loaded samples, regardless of the filter.
+- To check an inventory, click **Print…** to create an A4 checklist. Choose the columns and their order, page grouping, and optional **Correct** and **Incorrect** check columns.
 - To export a collection, click **Export collection…**. You can continue working while **Export queued** is shown; keep the app open until the completion dialog appears. This can be useful as a backup. Synchronized collections cannot be exported.
 
 ![Inventory verification checklist with anonymized locations](docs/images/checklist-anonymized.png)

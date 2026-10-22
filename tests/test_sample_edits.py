@@ -7,6 +7,22 @@ import pytest
 from test_amount_display import app
 
 
+def test_printing_uses_location_filtered_samples(monkeypatch):
+    rows = [{"id": 1}, {"id": 2}]
+    printed = []
+    monkeypatch.setattr(app, "save_profile_settings", lambda settings: None)
+    monkeypatch.setattr(app, "write_inventory_pdf", lambda path, samples, layout: printed.extend(samples))
+    monkeypatch.setattr(app.subprocess, "Popen", lambda *args: None)
+    monkeypatch.setattr(app.os, "startfile", lambda path: None, raising=False)
+    viewer = SimpleNamespace(
+        rows=rows, filtered_rows=lambda: rows[:1],
+        choose_print_layout=lambda: {"columns": ["label"]}, profile_settings={},
+        status=SimpleNamespace(configure=lambda **kwargs: None), colors={"muted": "gray"},
+    )
+    app.Inventorizer.printable(viewer)
+    assert printed == [{"id": 1}]
+
+
 def test_location_filter_deselects_hidden_samples_without_restoring_them():
     selection = {"1", "2"}
     visible = [{"id": 1}]

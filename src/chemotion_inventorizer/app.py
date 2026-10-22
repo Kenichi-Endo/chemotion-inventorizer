@@ -2436,7 +2436,7 @@ class Inventorizer(tk.Tk):
         save_profile_settings(self.profile_settings)
         path = Path(tempfile.gettempdir()) / "Chemotion-inventory.pdf"
         try:
-            rows = self.rows
+            rows = self.filtered_rows()
             write_inventory_pdf(path, rows, layout)
         except OSError as error:
             messagebox.showerror("Chemotion Inventorizer", f"The PDF could not be created:\n\n{error}")
