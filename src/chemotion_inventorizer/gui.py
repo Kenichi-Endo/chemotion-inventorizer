@@ -286,7 +286,8 @@ class Inventorizer(tk.Tk):
             ]}),
         ])
         self.update_sort_headings()
-        for key, width in self.column_widths.items(): self.tree.column(key, width=width, minwidth=self.column_min_widths[key], anchor="center" if key in {"decoupled", "inventory_sample"} else "w")
+        for key, width in self.column_widths.items(): self.tree.column(key, width=width, minwidth=self.column_min_widths[key], stretch=False, anchor="center" if key in {"decoupled", "inventory_sample"} else "w")
+        self.restore_column_widths()
         vertical = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview); horizontal = ttk.Scrollbar(frame, orient="horizontal", command=self.tree.xview); self.vertical_scrollbar = vertical; self.horizontal_scrollbar = horizontal; self.tree.configure(yscrollcommand=self.tree_yview_changed, xscrollcommand=self.tree_xview_changed)
         self.tree.grid(row=0,column=0,sticky="nsew"); vertical.grid(row=0,column=1,sticky="ns"); horizontal.grid(row=1,column=0,sticky="ew"); frame.columnconfigure(0,weight=1); frame.rowconfigure(0,weight=1)
         self.progress_area = tk.Frame(self, padx=24); self.progress_area.grid(row=2, column=0, sticky="ew", pady=(0, 18))
@@ -345,6 +346,26 @@ class Inventorizer(tk.Tk):
                          minwidth=round(self.structure_size * 1.5) + 10 if structure_visible else 0,
                          stretch=False, anchor="center")
         self.style.configure("Inventory.Treeview", rowheight=self.table_row_height())
+        self.restore_column_widths()
+    def restore_column_widths(self):
+        widths = self.profile_settings.get("column_widths", {})
+        if not isinstance(widths, dict):
+            return
+        for key, width in widths.items():
+            if key not in self.column_min_widths or type(width) is not int or width <= 0:
+                continue
+            if key == "structure" and not self.column_visibility[key].get():
+                continue
+            column = "#0" if key == "structure" else key
+            minimum = self.tree.column(column, "minwidth")
+            self.tree.column(column, width=max(minimum, width))
+    def remember_column_widths(self):
+        widths = self.profile_settings.get("column_widths", {})
+        widths = dict(widths) if isinstance(widths, dict) else {}
+        for key in self.visible_column_keys():
+            widths[key] = self.tree.column("#0" if key == "structure" else key, "width")
+        self.profile_settings["column_widths"] = widths
+        save_profile_settings(self.profile_settings)
     def table_row_height(self):
         return max(self.structure_size + 6 if self.column_visibility["structure"].get() else 34,
                    self.sample_list_font.metrics("linespace") + 10)
@@ -397,6 +418,7 @@ class Inventorizer(tk.Tk):
             return None
         return self.displayed_column_key(event)
     def begin_column_drag(self, event):
+        self.resizing_column = self.tree.identify_region(event.x, event.y) == "separator"
         self.dragged_column = self.header_column_key(event)
         self.drag_target_column = self.dragged_column
         self.column_dragging = False
@@ -417,6 +439,10 @@ class Inventorizer(tk.Tk):
             self.column_drag_feedback.show(event)
         return "break"
     def finish_column_drag(self, event):
+        if getattr(self, "resizing_column", False):
+            self.resizing_column = False
+            self.after_idle(self.remember_column_widths)
+            return None
         source = getattr(self, "dragged_column", None)
         target = self.header_column_key(event) or getattr(self, "drag_target_column", None)
         dragged = getattr(self, "column_dragging", False)
@@ -449,6 +475,9 @@ class Inventorizer(tk.Tk):
         return "break"
     def adjust_displayed_column_widths(self):
         """Fit the currently visible columns to the table, preserving their proportions."""
+        if self.profile_settings.get("column_widths"):
+            self.restore_column_widths()
+            return
         visible = self.displayed_data_column_keys()
         available_width = self.tree.winfo_width() - 2
         if self.column_visibility["structure"].get():
@@ -490,7 +519,8 @@ class Inventorizer(tk.Tk):
             for item_id in self.tree.get_children("")
         )])
         width = max(self.column_min_widths[key], content_width + 24)
-        self.tree.column(key, width=width)
+        self.tree.column("#0" if key == "structure" else key, width=width)
+        self.remember_column_widths()
         return "break"
     def remember_credentials_changed(self):
         """Immediately remove saved credentials when Remember is turned off."""
