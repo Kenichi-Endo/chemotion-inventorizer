@@ -92,7 +92,8 @@ Files in `src/chemotion_inventorizer/`:
 
 | Source file | Purpose |
 | --- | --- |
-| `app.py` | Application entry point; starts the GUI. |
+| `__init__.py` | Package identity and application name. |
+| `__main__.py` | Module and installed-command entry point; starts the GUI. |
 | `gui.py` | Window, table, dialogs, cell editing, and structure thumbnails. |
 | `client.py` | Chemotion sign-in, inventory retrieval, sample updates, and collection export. |
 | `inventory.py` | Inventory rows, column definitions, amount and date formatting, sorting, and location filtering. |

@@ -14,7 +14,7 @@ from pathlib import Path
 import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import filedialog, messagebox, ttk
-from . import client
+from . import APP_NAME, client
 from .settings import (
     clear_credentials,
     column_order,
@@ -191,7 +191,7 @@ class Inventorizer(tk.Tk):
     palettes = {False: {"base":"#f4f7f6","panel":"#ffffff","text":"#17211f","muted":"#52616c","accent":"#08756a","error":"#b42318"}, True: {"base":"#1c1c1e","panel":"#2c2c2e","text":"#f2f2f7","muted":"#aeaeb2","accent":"#41c7b3","error":"#ff6961"}}
     def __init__(self):
         username, password = saved_credentials(); client.CHEMOTION_USERNAME, client.CHEMOTION_PASSWORD = username, password
-        super().__init__(); self.title("Chemotion Inventorizer"); self.minsize(1050, 620); self.rows = []; self.selected_row_ids = set(); self.location_filter_retained_row_ids = set(); self.sort_key = "label"; self.sort_reverse = False; self.location_filter = tk.StringVar(value="All locations"); self.collection_value = tk.StringVar(value="Choose collection…"); self.collection_choices = {}; self.logged_in = False; self.profile_settings = saved_profile_settings(); saved_server = self.profile_settings.get("chemotion_server", DEFAULT_CHEMOTION_URL); self.server_value = tk.StringVar(value=saved_server if isinstance(saved_server, str) else DEFAULT_CHEMOTION_URL); self.username_value = tk.StringVar(value=username); self.password_value = tk.StringVar(value=password); self.remember_credentials = tk.BooleanVar(value=True); self.amount_editor = None; self.editing_cell = None; self.edit_after_save = None; self.editing_rows = []; self.inventory_cancel_event = None; self.inventory_loading = False
+        super().__init__(); self.title(APP_NAME); self.minsize(1050, 620); self.rows = []; self.selected_row_ids = set(); self.location_filter_retained_row_ids = set(); self.sort_key = "label"; self.sort_reverse = False; self.location_filter = tk.StringVar(value="All locations"); self.collection_value = tk.StringVar(value="Choose collection…"); self.collection_choices = {}; self.logged_in = False; self.profile_settings = saved_profile_settings(); saved_server = self.profile_settings.get("chemotion_server", DEFAULT_CHEMOTION_URL); self.server_value = tk.StringVar(value=saved_server if isinstance(saved_server, str) else DEFAULT_CHEMOTION_URL); self.username_value = tk.StringVar(value=username); self.password_value = tk.StringVar(value=password); self.remember_credentials = tk.BooleanVar(value=True); self.amount_editor = None; self.editing_cell = None; self.edit_after_save = None; self.editing_rows = []; self.inventory_cancel_event = None; self.inventory_loading = False
         try: client.CHEMOTION_URL = normalized_chemotion_url(self.server_value.get())
         except ValueError: self.server_value.set(DEFAULT_CHEMOTION_URL); client.CHEMOTION_URL = DEFAULT_CHEMOTION_URL
         self.column_order = column_order(self.profile_settings.get("column_order"), self.default_column_order)
@@ -501,7 +501,7 @@ class Inventorizer(tk.Tk):
         except Exception as error:
             # Do not leave the control unchecked when secure storage could not be cleared.
             self.remember_credentials.set(True)
-            messagebox.showerror("Chemotion Inventorizer", str(error))
+            messagebox.showerror(APP_NAME, str(error))
 
     def login(self):
         username, password = self.username_value.get().strip(), self.password_value.get()
@@ -519,7 +519,7 @@ class Inventorizer(tk.Tk):
                 # Also clear here in case the checkbox was changed programmatically.
                 clear_credentials()
         except Exception as error:
-            messagebox.showerror("Chemotion Inventorizer", str(error)); return
+            messagebox.showerror(APP_NAME, str(error)); return
         client.CHEMOTION_URL, client.CHEMOTION_USERNAME, client.CHEMOTION_PASSWORD = server, username, password
         self.server_value.set(server)
         self.profile_settings["chemotion_server"] = server
@@ -565,7 +565,7 @@ class Inventorizer(tk.Tk):
         else:
             self.status.configure(text="Choose a collection to retrieve its inventory.", fg=self.colors["muted"])
     def _collections_failed(self, error):
-        self.set_controls_busy(False); self.status.configure(text="Chemotion collections could not be retrieved.",fg=self.colors["error"]); messagebox.showerror("Chemotion Inventorizer", error)
+        self.set_controls_busy(False); self.status.configure(text="Chemotion collections could not be retrieved.",fg=self.colors["error"]); messagebox.showerror(APP_NAME, error)
     def export_collection(self):
         collection = self.collection_choices.get(self.collection_value.get())
         if not collection or collection.get("_synchronized"):
@@ -695,7 +695,7 @@ class Inventorizer(tk.Tk):
     def _failed(self,error, cancelled=None):
         if cancelled is not None and (cancelled.is_set() or cancelled is not self.inventory_cancel_event): return
         self.inventory_loading = False
-        self.hide_progress(); self.status.configure(text="The Chemotion inventory could not be retrieved.",fg=self.colors["error"]); self.set_controls_busy(False); messagebox.showerror("Chemotion Inventorizer",error)
+        self.hide_progress(); self.status.configure(text="The Chemotion inventory could not be retrieved.",fg=self.colors["error"]); self.set_controls_busy(False); messagebox.showerror(APP_NAME,error)
     def set_controls_busy(self, busy):
         collection = self.collection_choices.get(self.collection_value.get())
         self.export_button.configure(state="normal" if not busy and self.logged_in and collection and not collection.get("_synchronized") else "disabled")
@@ -950,7 +950,7 @@ class Inventorizer(tk.Tk):
         self.hide_progress(); self.set_controls_busy(False)
         self.print_button.configure(state="normal" if self.rows else "disabled")
         self.status.configure(text="The sample could not be removed from the collection.", fg=self.colors["error"])
-        messagebox.showerror("Chemotion Inventorizer", error)
+        messagebox.showerror(APP_NAME, error)
     def extend_edit_selection(self, event):
         """Extend row selection without opening an editor on a modifier-click."""
         item_id = self.tree.identify_row(event.y)
@@ -1156,13 +1156,13 @@ class Inventorizer(tk.Tk):
         changed = len(selected_rows) - len(failures)
         if failures:
             self.status.configure(text=f"Updated {label} for {changed} of {len(selected_rows)} samples; {len(failures)} could not be changed.", fg=self.colors["error"])
-            messagebox.showerror("Chemotion Inventorizer", "Some samples could not be changed:\n\n" + "\n".join(f"{row['sample']}: {error}" for row, error in failures[:5]))
+            messagebox.showerror(APP_NAME, "Some samples could not be changed:\n\n" + "\n".join(f"{row['sample']}: {error}" for row, error in failures[:5]))
         else:
             self.status.configure(text=f"Set {label} to {'checked' if value else 'unchecked'} for {changed} sample{'s' if changed != 1 else ''}.", fg=self.colors["muted"])
     def _flags_change_failed(self, label, error):
         self.hide_progress(); self.set_controls_busy(False); self.print_button.configure(state="normal" if self.rows else "disabled")
         self.status.configure(text=f"{label} could not be changed.", fg=self.colors["error"])
-        messagebox.showerror("Chemotion Inventorizer", error)
+        messagebox.showerror(APP_NAME, error)
     def open_sample(self, event):
         """Open a sample in Chemotion when a non-editable cell is double-clicked."""
         item_id = self.tree.identify_row(event.y)
@@ -1190,7 +1190,7 @@ class Inventorizer(tk.Tk):
         self.hide_progress(); self.set_controls_busy(False)
         self.print_button.configure(state="normal" if self.rows else "disabled")
         self.status.configure(text="Chemotion opened, but the sample information could not be refreshed.", fg=self.colors["error"])
-        messagebox.showerror("Chemotion Inventorizer", error)
+        messagebox.showerror(APP_NAME, error)
     def cancel_amount_edit(self):
         if self.amount_editor:
             editor, self.amount_editor = self.amount_editor, None
@@ -1401,7 +1401,7 @@ class Inventorizer(tk.Tk):
         self.edit_after_save = None
         self.hide_progress(); self.set_controls_busy(False); self.print_button.configure(state="normal" if self.rows else "disabled")
         self.status.configure(text=f"The {label} could not be changed.", fg=self.colors["error"])
-        messagebox.showerror("Chemotion Inventorizer", error)
+        messagebox.showerror(APP_NAME, error)
     def _change_amount(self, rows, value, unit):
         failures = []
         try:
@@ -1427,7 +1427,7 @@ class Inventorizer(tk.Tk):
         self.edit_after_save = None
         self.hide_progress(); self.set_controls_busy(False); self.print_button.configure(state="normal" if self.rows else "disabled")
         self.status.configure(text="The amount could not be changed.", fg=self.colors["error"])
-        messagebox.showerror("Chemotion Inventorizer", error)
+        messagebox.showerror(APP_NAME, error)
     def _save_vendor(self, rows, vendor):
         self._start_sample_edit(rows, "vendor", self._change_vendor, vendor)
     def _change_vendor(self, rows, vendor):
@@ -1451,7 +1451,7 @@ class Inventorizer(tk.Tk):
         if self.selected_row_ids: self.tree.selection_set(tuple(self.selected_row_ids & set(self.tree.get_children())))
         if failures:
             self.status.configure(text=f"Updated {label} for {changed} of {len(rows)} samples; {len(failures)} could not be changed.", fg=self.colors["error"])
-            messagebox.showerror("Chemotion Inventorizer", "Some samples could not be changed:\n\n" + "\n".join(f"{row['sample']}: {error}" for row, error in failures[:5]))
+            messagebox.showerror(APP_NAME, "Some samples could not be changed:\n\n" + "\n".join(f"{row['sample']}: {error}" for row, error in failures[:5]))
         else:
             self.status.configure(text=f"Updated the {label} for {changed} sample{'s' if changed != 1 else ''}.", fg=self.colors["muted"])
         self.edit_saved_next_cell()
@@ -1468,7 +1468,7 @@ class Inventorizer(tk.Tk):
         self.edit_after_save = None
         self.hide_progress(); self.set_controls_busy(False); self.print_button.configure(state="normal" if self.rows else "disabled")
         self.status.configure(text="The vendor could not be changed.", fg=self.colors["error"])
-        messagebox.showerror("Chemotion Inventorizer", error)
+        messagebox.showerror(APP_NAME, error)
     def _change_locations(self, selected_rows, location):
         failures = []
         try:
@@ -1494,11 +1494,11 @@ class Inventorizer(tk.Tk):
         changed = len(selected_rows) - len(failures)
         if failures:
             self.status.configure(text=f"Changed {changed} of {len(selected_rows)} locations; {len(failures)} could not be changed.", fg=self.colors["error"])
-            messagebox.showerror("Chemotion Inventorizer", "Some locations could not be changed:\n\n" + "\n".join(f"{row['sample']}: {error}" for row, error in failures[:5]))
+            messagebox.showerror(APP_NAME, "Some locations could not be changed:\n\n" + "\n".join(f"{row['sample']}: {error}" for row, error in failures[:5]))
         else: self.status.configure(text=f"Changed the location of {changed} item{'s' if changed != 1 else ''} to {location}.", fg=self.colors["muted"])
         self.edit_saved_next_cell()
     def _locations_change_failed(self, error):
-        self.hide_progress(); self.status.configure(text="The selected locations could not be changed.", fg=self.colors["error"]); self.set_controls_busy(False); self.print_button.configure(state="normal" if self.rows else "disabled"); messagebox.showerror("Chemotion Inventorizer", error)
+        self.hide_progress(); self.status.configure(text="The selected locations could not be changed.", fg=self.colors["error"]); self.set_controls_busy(False); self.print_button.configure(state="normal" if self.rows else "disabled"); messagebox.showerror(APP_NAME, error)
     def choose_print_layout(self):
         """Show print-only column and page-break choices before opening macOS Print."""
         print_keys = tuple(key for key in self.keys if key != "structure") + PRINT_CHECKLIST_KEYS
@@ -1638,7 +1638,7 @@ class Inventorizer(tk.Tk):
             rows = self.filtered_rows()
             write_inventory_pdf(path, rows, layout)
         except OSError as error:
-            messagebox.showerror("Chemotion Inventorizer", f"The PDF could not be created:\n\n{error}")
+            messagebox.showerror(APP_NAME, f"The PDF could not be created:\n\n{error}")
             return
         self.status.configure(text=f"Created a checklist with {len(rows)} items. Choose a printer in the print dialog.", fg=self.colors["muted"])
         # Ask PDFKit for a native NSPrintOperation. This presents the macOS

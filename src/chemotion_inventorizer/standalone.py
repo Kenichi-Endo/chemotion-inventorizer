@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 import sys
 
-from chemotion_inventorizer import app
+from chemotion_inventorizer.__main__ import main as launch_app
 from chemotion_inventorizer.client import ChemotionClient
 
 
@@ -25,7 +25,7 @@ def self_test(report_path):
         for variable, filename in (("TCL_LIBRARY", "init.tcl"), ("TK_LIBRARY", "tk.tcl")):
             if not (Path(os.environ.get(variable, "")) / filename).is_file():
                 raise RuntimeError(f"The bundle is missing {filename}.")
-        if not (Path(app.__file__).resolve().parent / "assets" / "icon.png").is_file():
+        if not (Path(__file__).resolve().parent / "assets" / "icon.png").is_file():
             raise RuntimeError("The bundle is missing the application icon.")
     ChemotionClient()
     Path(report_path).write_text(json.dumps({
@@ -41,10 +41,10 @@ def main():
     if len(sys.argv) == 3 and sys.argv[1] == "--self-test":
         self_test(sys.argv[2])
         return
-    icon = Path(app.__file__).resolve().parent / "assets" / "icon.png"
+    icon = Path(__file__).resolve().parent / "assets" / "icon.png"
     if icon.is_file():
         os.environ["CHEMOTION_INVENTORIZER_ICON"] = str(icon)
-    app.main()
+    launch_app()
 
 
 if __name__ == "__main__":

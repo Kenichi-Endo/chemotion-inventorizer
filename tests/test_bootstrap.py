@@ -85,3 +85,41 @@ def test_missing_renderer_in_existing_environment_is_repaired(tmp_path, monkeypa
     pip_commands = [cmd for cmd in commands if "pip" in cmd]
     assert len(pip_commands) == 1
     assert "--force-reinstall" in pip_commands[0]
+
+
+@pytest.mark.parametrize("platform_name, windowless", [("darwin", False), ("win32", False),
+                                                       ("win32", True)])
+def test_launcher_runs_package_module(tmp_path, monkeypatch, platform_name, windowless):
+    python = tmp_path / "environment" / ("python.exe" if platform_name == "win32" else "python3")
+    python.parent.mkdir()
+    python.touch()
+    if windowless:
+        python.with_name("pythonw.exe").touch()
+    commands = []
+
+    def run(command, **kwargs):
+        commands.append((command, kwargs))
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(bootstrap.sys, "platform", platform_name)
+    monkeypatch.setattr(bootstrap.Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(bootstrap, "state_directory", lambda: tmp_path / "state")
+    monkeypatch.setattr(bootstrap, "prepare_environment", lambda *args: python)
+    monkeypatch.setattr(bootstrap.subprocess, "run", run)
+    monkeypatch.setattr(bootstrap.subprocess, "Popen", run)
+
+    assert bootstrap.main(["example argument"]) == 0
+    executable = python.with_name("pythonw.exe") if windowless else python
+    assert commands[0][0] == [str(executable), "-m", "chemotion_inventorizer", "example argument"]
+    assert commands[0][1]["cwd"] == SOURCE.parents[2]
+
+
+@pytest.mark.skipif(bootstrap.sys.platform == "win32", reason="Requires a POSIX shell")
+def test_macos_wrapper_accepts_current_source_layout():
+    launcher = SOURCE.parents[2] / "Chemotion Inventorizer.app" / "Contents" / "MacOS" / "Chemotion Inventorizer"
+    # Run the wrapper's source checks, stopping before environment setup or GUI launch.
+    preflight = launcher.read_text().split("\nexport ", 1)[0]
+    result = subprocess.run(["/bin/sh", "-c", preflight, str(launcher)],
+                            capture_output=True, text=True)
+
+    assert result.returncode == 0, result.stderr

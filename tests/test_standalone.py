@@ -12,7 +12,7 @@ def test_self_test_cli_checks_dependencies_without_launching_gui(tmp_path, monke
     def unexpected_gui():
         raise AssertionError("The dependency check must not open the application.")
 
-    monkeypatch.setattr(standalone.app, "main", unexpected_gui)
+    monkeypatch.setattr(standalone, "launch_app", unexpected_gui)
     standalone.main()
 
     result = json.loads(report.read_text(encoding="utf-8"))

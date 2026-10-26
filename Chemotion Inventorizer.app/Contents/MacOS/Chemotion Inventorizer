@@ -4,7 +4,7 @@
 # from this launcher instead of copying the Python source into the bundle.
 launcher_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P) || exit 1
 project_dir=$(CDPATH= cd -- "$launcher_dir/../../.." && pwd -P) || exit 1
-source="$project_dir/src/chemotion_inventorizer/app.py"
+source="$project_dir/src/chemotion_inventorizer/__main__.py"
 bootstrap="$project_dir/src/chemotion_inventorizer/bootstrap.py"
 icon="$project_dir/Chemotion Inventorizer.app/Contents/Resources/chemotion-inventorizer-icon.png"
 

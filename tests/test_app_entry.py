@@ -1,14 +1,13 @@
-"""Check both launch entry points without opening the GUI."""
-from pathlib import Path
+"""Check package and installed-command entry points without opening the GUI."""
 import runpy
 import sys
 
 import pytest
 
-from chemotion_inventorizer import app, gui
+from chemotion_inventorizer import __main__ as entry_point, gui
 
 
-@pytest.mark.parametrize("entry", ["script", "module"])
+@pytest.mark.parametrize("entry", ["command", "module"])
 def test_entry_starts_gui_event_loop(monkeypatch, entry):
     started = []
 
@@ -17,10 +16,10 @@ def test_entry_starts_gui_event_loop(monkeypatch, entry):
             started.append(True)
 
     monkeypatch.setattr(gui, "Inventorizer", Window)
-    if entry == "script":
-        runpy.run_path(str(Path(app.__file__)), run_name="__main__")
+    if entry == "command":
+        entry_point.main()
     else:
-        monkeypatch.delitem(sys.modules, "chemotion_inventorizer.app")
-        runpy.run_module("chemotion_inventorizer.app", run_name="__main__")
+        monkeypatch.delitem(sys.modules, "chemotion_inventorizer.__main__")
+        runpy.run_module("chemotion_inventorizer", run_name="__main__")
 
     assert started == [True]

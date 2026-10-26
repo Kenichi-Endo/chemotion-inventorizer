@@ -88,15 +88,15 @@ def main(argv=None):
             if options.setup_only:
                 print(f"Environment ready: {python.parent.parent}")
                 return 0
-            source = project_root / "src" / "chemotion_inventorizer" / "app.py"
+            command_arguments = ["-m", "chemotion_inventorizer", *app_arguments]
             if sys.platform == "win32":
                 pythonw = python.with_name("pythonw.exe")
                 if pythonw.is_file():
-                    subprocess.Popen([str(pythonw), str(source), *app_arguments],
+                    subprocess.Popen([str(pythonw), *command_arguments],
                                      stdin=subprocess.DEVNULL, stdout=log,
                                      stderr=subprocess.STDOUT, cwd=project_root)
                     return 0
-            return subprocess.run([str(python), str(source), *app_arguments],
+            return subprocess.run([str(python), *command_arguments],
                                   stdout=log, stderr=subprocess.STDOUT,
                                   cwd=project_root).returncode
         except Exception:
