@@ -1,4 +1,5 @@
 """Check edit refreshes and partial failures without opening the application."""
+from chemotion_inventorizer import client as api_client, inventory
 
 from types import SimpleNamespace
 
@@ -139,7 +140,7 @@ def test_density_request_preserves_flags():
 
     requests = []
     client = SimpleNamespace(request=lambda *args, **kwargs: requests.append((args, kwargs)))
-    app.ChemotionClient.set_density(client, 7, "1.25", {"id": 3}, True, False)
+    api_client.ChemotionClient.set_density(client, 7, "1.25", {"id": 3}, True, False)
     args, kwargs = requests[0]
     assert args[0] == "/api/v1/samples/7"
     assert json.loads(args[1]) == {"density": "1.25", "container": {"id": 3},
@@ -194,7 +195,7 @@ def test_amount_refresh_rejects_missing_value_without_losing_row():
     client = SimpleNamespace(inventory_entry=lambda *args: {"id": 1, "amount_value": None})
 
     with pytest.raises(ConnectionError, match="did not retain the amount update"):
-        app.refresh_inventory_row(client, row, require_amount=True)
+        inventory.refresh_inventory_row(client, row, require_amount=True)
 
     assert row == original
 
@@ -203,7 +204,7 @@ def test_amount_refresh_accepts_zero():
     row = {"id": 1, "amount_value": "2"}
     client = SimpleNamespace(inventory_entry=lambda *args: {"id": 1, "amount_value": 0})
 
-    app.refresh_inventory_row(client, row, require_amount=True)
+    inventory.refresh_inventory_row(client, row, require_amount=True)
 
     assert row == {"id": 1, "amount_value": 0}
 

@@ -1,5 +1,5 @@
 """Collection retrieval order and partial-result stopping, without opening a GUI."""
-import importlib.util
+from chemotion_inventorizer import client as api_client
 import json
 from collections import deque
 from pathlib import Path
@@ -8,22 +8,19 @@ from types import SimpleNamespace
 
 import pytest
 
-SOURCE = Path(__file__).resolve().parents[1] / "src" / "chemotion_inventorizer" / "app.py"
-SPEC = importlib.util.spec_from_file_location("inventory_loading_app", SOURCE)
-app = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(app)
+from chemotion_inventorizer import gui as app
 
 
 def prepare_client(monkeypatch):
-    monkeypatch.setattr(app.ChemotionClient, "login", lambda self: None)
-    monkeypatch.setattr(app.ChemotionClient, "request", lambda self, path: json.dumps({
+    monkeypatch.setattr(api_client.ChemotionClient, "login", lambda self: None)
+    monkeypatch.setattr(api_client.ChemotionClient, "request", lambda self, path: json.dumps({
         "samples": [{"id": number, "short_label": f"S{number}"} for number in (2, 10, 1)],
         "samples_count": 3,
     }).encode())
-    monkeypatch.setattr(app.ChemotionClient, "inventory_entry",
+    monkeypatch.setattr(api_client.ChemotionClient, "inventory_entry",
                         lambda self, sample_id, *args: {"id": sample_id})
-    monkeypatch.setattr(app, "MAX_CONCURRENT_SAMPLE_REQUESTS", 1)
-    return app.ChemotionClient()
+    monkeypatch.setattr(api_client, "MAX_CONCURRENT_SAMPLE_REQUESTS", 1)
+    return api_client.ChemotionClient()
 
 
 def test_inventory_returns_descending_numeric_label_order(monkeypatch):
@@ -82,13 +79,13 @@ def test_stop_preserves_completed_details(monkeypatch):
             release.wait(2)
         return {"id": sample_id}
 
-    monkeypatch.setattr(app.ChemotionClient, "inventory_entry", entry)
+    monkeypatch.setattr(api_client.ChemotionClient, "inventory_entry", entry)
     def progress(message):
         if message.startswith("Retrieving sample information: 1"):
             cancelled.set()
 
     try:
-        with pytest.raises(app.InventoryLoadCancelled) as stopped:
+        with pytest.raises(api_client.InventoryLoadCancelled) as stopped:
             client.inventory(42, progress=progress, cancelled=cancelled)
         assert stopped.value.rows == [{"id": 10}]
     finally:
@@ -106,14 +103,14 @@ def test_completed_rows_are_delivered_before_loading_finishes(monkeypatch):
             release.wait(2)
         return {"id": sample_id}
 
-    monkeypatch.setattr(app.ChemotionClient, "inventory_entry", entry)
+    monkeypatch.setattr(api_client.ChemotionClient, "inventory_entry", entry)
 
     def rows_loaded(rows):
         delivered.extend(rows)
         cancelled.set()
 
     try:
-        with pytest.raises(app.InventoryLoadCancelled) as stopped:
+        with pytest.raises(api_client.InventoryLoadCancelled) as stopped:
             client.inventory(42, cancelled=cancelled, rows_loaded=rows_loaded)
         assert delivered == [{"id": 10}]
         assert delivered == stopped.value.rows
@@ -256,7 +253,7 @@ def test_sequential_inventory_waits_for_thumbnail_acknowledgement(monkeypatch):
             delivered.set()
             assert displayed.wait(2)
 
-    monkeypatch.setattr(app.ChemotionClient, "inventory_entry", entry)
+    monkeypatch.setattr(api_client.ChemotionClient, "inventory_entry", entry)
     worker = threading.Thread(target=lambda: result.extend(
         client.inventory(42, rows_loaded=rows_loaded, sequential=True)))
     worker.start()
@@ -282,7 +279,7 @@ def test_stop_releases_wait_for_thumbnail_and_keeps_sample(monkeypatch):
         started.append(sample_id)
         return {"id": sample_id}
 
-    monkeypatch.setattr(app.ChemotionClient, "inventory_entry", entry)
+    monkeypatch.setattr(api_client.ChemotionClient, "inventory_entry", entry)
     viewer = SimpleNamespace(
         after=lambda delay, callback, *args: callback(*args),
         _rows_loaded=lambda rows, current, displayed: delivered.set(),

@@ -6,6 +6,7 @@ from pathlib import Path
 import sys
 
 from chemotion_inventorizer import app
+from chemotion_inventorizer.client import ChemotionClient
 
 
 def self_test(report_path):
@@ -26,7 +27,7 @@ def self_test(report_path):
                 raise RuntimeError(f"The bundle is missing {filename}.")
         if not (Path(app.__file__).resolve().parent / "assets" / "icon.png").is_file():
             raise RuntimeError("The bundle is missing the application icon.")
-    app.ChemotionClient()
+    ChemotionClient()
     Path(report_path).write_text(json.dumps({
         "frozen": bool(getattr(sys, "frozen", False)),
         "python": sys.version.split()[0],

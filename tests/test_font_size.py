@@ -1,4 +1,5 @@
 """Check table font preferences without opening a GUI."""
+from chemotion_inventorizer import settings
 
 from types import SimpleNamespace
 
@@ -11,7 +12,7 @@ from test_amount_display import app
                                                    ("", None), ("abc", None),
                                                    ("7", None), ("49", None)])
 def test_font_size_changes_and_profile_round_trip(value, expected, monkeypatch, tmp_path):
-    monkeypatch.setattr(app, "PROFILE_SETTINGS_PATH", tmp_path / "settings.json")
+    monkeypatch.setattr(settings, "PROFILE_SETTINGS_PATH", tmp_path / "settings.json")
     sizes = []
     styles = []
     view = SimpleNamespace(
@@ -24,11 +25,11 @@ def test_font_size_changes_and_profile_round_trip(value, expected, monkeypatch, 
     app.Inventorizer.change_font_size(view)
     if expected is None:
         assert sizes == styles == []
-        assert not app.PROFILE_SETTINGS_PATH.exists()
+        assert not settings.PROFILE_SETTINGS_PATH.exists()
     else:
         assert sizes == [expected]
         assert styles == [{"rowheight": 56}]
-        assert app.saved_profile_settings() == {
+        assert settings.saved_profile_settings() == {
             "visible_columns": ["label"], "table_font_size": expected}
 
 

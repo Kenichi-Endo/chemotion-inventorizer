@@ -1,4 +1,5 @@
 """Collection export notification matching and safe archive saving."""
+from chemotion_inventorizer import client as api_client
 import io
 import json
 import zipfile
@@ -11,7 +12,7 @@ from test_amount_display import app
 
 @pytest.mark.parametrize("result", ["zip", "html", "foreign", "failure"])
 def test_export_download(tmp_path, monkeypatch, result):
-    monkeypatch.setattr(app, "CHEMOTION_URL", "https://eln.example.org")
+    monkeypatch.setattr(api_client, "CHEMOTION_URL", "https://eln.example.org")
     archive = io.BytesIO()
     with zipfile.ZipFile(archive, "w") as output:
         output.writestr("collection.json", "{}")
@@ -36,7 +37,7 @@ def test_export_download(tmp_path, monkeypatch, result):
         assert path == link
         return b"<html>Sign in</html>" if result == "html" else archive.getvalue()
 
-    client = app.ChemotionClient()
+    client = api_client.ChemotionClient()
     client.request = request
     destination = tmp_path / "export.zip"
     destination.write_bytes(b"existing")
@@ -51,7 +52,7 @@ def test_export_download(tmp_path, monkeypatch, result):
 
 
 def test_export_timeout_preserves_file(tmp_path):
-    client = app.ChemotionClient()
+    client = api_client.ChemotionClient()
     client.request = lambda *args, **kwargs: b'{"messages": []}'
     destination = tmp_path / "export.zip"
     with pytest.raises(TimeoutError):
@@ -73,7 +74,7 @@ def test_legacy_export_route_only_on_not_found(tmp_path, status):
         assert json.loads(data) == {"collections": [7], "format": "zip", "nested": False}
         assert method == "POST"
 
-    client = app.ChemotionClient()
+    client = api_client.ChemotionClient()
     client.request = request
     with pytest.raises(TimeoutError if status == 404 else ConnectionError):
         client.export_collection({"id": 7, "label": "Inventory"}, tmp_path / "export.zip", timeout=0)

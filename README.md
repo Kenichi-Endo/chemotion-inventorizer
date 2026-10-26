@@ -72,7 +72,6 @@ If macOS says **“Chemotion Inventorizer.app” cannot be opened**:
 *A4 inventory checklist with verification columns. Locations have been anonymized.*
 
 ## Customization
-
 Edit the Python files in `src/chemotion_inventorizer/` manually or with a coding agent, then restart the customizable launcher.
 
 ## Data handling
@@ -87,6 +86,20 @@ Server and display preferences are saved separately in the current user's profil
 - Windows: `%APPDATA%\Chemotion Inventorizer\settings.json`
 
 Customizable launcher logs are in `~/Library/Logs/Chemotion Inventorizer/launcher.log` on macOS or `%LOCALAPPDATA%\Chemotion Inventorizer\Logs\launcher.log` on Windows.
+
+## Source files
+Files in `src/chemotion_inventorizer/`:
+
+| Source file | Purpose |
+| --- | --- |
+| `app.py` | Application entry point; starts the GUI. |
+| `gui.py` | Window, table, dialogs, cell editing, and structure thumbnails. |
+| `client.py` | Chemotion sign-in, inventory retrieval, sample updates, and collection export. |
+| `inventory.py` | Inventory rows, column definitions, amount and date formatting, sorting, and location filtering. |
+| `settings.py` | Saved preferences, column and print settings, and secure credential storage. |
+| `printing.py` | PDF checklist layout and generation. |
+| `bootstrap.py` | Customizable launcher environment and dependency setup. |
+| `standalone.py` | Standalone app entry point and dependency checks. |
 
 ## License
 
