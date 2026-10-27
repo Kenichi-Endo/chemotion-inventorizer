@@ -183,11 +183,11 @@ class ColumnDragFeedback:
 class Inventorizer(tk.Tk):
     headings = INVENTORY_HEADINGS
     keys = INVENTORY_KEYS
-    column_menu_order = ("structure", "inventory_sample", "label", "location", "decoupled", "molecule", "density", "sample", "vendor", "amount", "last_modified")
-    default_column_order = ("structure", "inventory_sample", "label", "location", "decoupled", "molecule", "density", "sample", "vendor", "amount", "last_modified")
-    default_visible_columns = tuple(key for key in default_column_order if key != "decoupled")
-    column_widths = {"label":120,"structure":85,"molecule":250,"density":100,"sample":200,"vendor":135,"amount":100,"location":260,"last_modified":145,"decoupled":95,"inventory_sample":85}
-    column_min_widths = {"label":85,"structure":70,"molecule":120,"density":70,"sample":110,"vendor":90,"amount":70,"location":120,"last_modified":105,"decoupled":70,"inventory_sample":70}
+    column_menu_order = ("structure", "inventory_sample", "label", "location", "decoupled", "molecule", "density", "sample", "vendor", "amount", "last_modified", "created")
+    default_column_order = ("structure", "inventory_sample", "label", "location", "decoupled", "molecule", "density", "sample", "vendor", "amount", "last_modified", "created")
+    default_visible_columns = tuple(key for key in default_column_order if key not in {"decoupled", "created"})
+    column_widths = {"label":120,"structure":85,"molecule":250,"density":100,"sample":200,"vendor":135,"amount":100,"location":260,"last_modified":145,"created":145,"decoupled":95,"inventory_sample":85}
+    column_min_widths = {"label":85,"structure":70,"molecule":120,"density":70,"sample":110,"vendor":90,"amount":70,"location":120,"last_modified":105,"created":105,"decoupled":70,"inventory_sample":70}
     palettes = {False: {"base":"#f4f7f6","panel":"#ffffff","text":"#17211f","muted":"#52616c","accent":"#08756a","error":"#b42318"}, True: {"base":"#1c1c1e","panel":"#2c2c2e","text":"#f2f2f7","muted":"#aeaeb2","accent":"#41c7b3","error":"#ff6961"}}
     def __init__(self):
         username, password = saved_credentials(); client.CHEMOTION_USERNAME, client.CHEMOTION_PASSWORD = username, password
@@ -766,8 +766,8 @@ class Inventorizer(tk.Tk):
         def sort_value(item):
             if key == "label":
                 return natural_sort_value(item[key])
-            if key == "last_modified":
-                return last_modified_sort_value(item.get("last_modified_at"))
+            if key in {"last_modified", "created"}:
+                return last_modified_sort_value(item.get(f"{key}_at"))
             return str(item[key]).casefold()
         rows = self.filtered_rows()
         if self.column_visibility["structure"].get():
@@ -808,7 +808,7 @@ class Inventorizer(tk.Tk):
         # Treeview fonts apply to an entire row, not an individual column.  Keep
         # inventory numbers in the native table font instead of substituting
         # Unicode mathematical "bold" digits, which macOS renders in another face.
-        return (str(row["label"]), row["location"], displayed_row_value(row, "structure"), row["molecule"], displayed_row_value(row, "density"), row["sample"], row["vendor"], row["amount"], displayed_row_value(row, "last_modified"), checkbox(row["decoupled"]), checkbox(row["inventory_sample"]))
+        return (str(row["label"]), row["location"], displayed_row_value(row, "structure"), row["molecule"], displayed_row_value(row, "density"), row["sample"], row["vendor"], row["amount"], displayed_row_value(row, "last_modified"), displayed_row_value(row, "created"), checkbox(row["decoupled"]), checkbox(row["inventory_sample"]))
     def load_structure_images(self, rows):
         """Queue missing structures and fetch them serially as rows appear."""
         with self.structure_image_queue_lock:

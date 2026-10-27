@@ -13,6 +13,19 @@ import pytest
 from chemotion_inventorizer import gui as app
 
 
+def test_created_column_is_optional_and_follows_last_modified():
+    row = inventory.inventory_row({"created_at": "2026-09-09T08:30:00"})
+    index = app.Inventorizer.keys.index("last_modified") + 1
+    assert app.Inventorizer.keys[index] == "created"
+    assert app.Inventorizer.headings[index] == "Created"
+    assert app.Inventorizer.row_values(None, row)[index] == "2026-09-09 08:30:00"
+    assert row["created_at"] == "2026-09-09T08:30:00"
+    assert inventory.displayed_row_value(inventory.inventory_row({}), "created") == "—"
+    assert "created" not in app.Inventorizer.default_visible_columns
+    for order in (app.Inventorizer.column_menu_order, app.Inventorizer.default_column_order):
+        assert order[order.index("last_modified") + 1] == "created"
+
+
 def test_density_column_uses_sample_value_and_follows_molecule_name():
     row = inventory.inventory_row({"density": 0.789, "name": "Ethanol"})
     index = app.Inventorizer.keys.index("molecule") + 1

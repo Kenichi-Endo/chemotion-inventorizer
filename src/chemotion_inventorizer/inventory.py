@@ -6,8 +6,8 @@ from urllib.parse import quote
 from urllib.parse import urlsplit
 
 
-INVENTORY_KEYS = ("label", "location", "structure", "molecule", "density", "sample", "vendor", "amount", "last_modified", "decoupled", "inventory_sample")
-INVENTORY_HEADINGS = ("Short label", "Location", "Structure", "Molecule name", "Density", "Sample name", "Vendor", "Amount", "Last modified", "Decoupled", "Inventory")
+INVENTORY_KEYS = ("label", "location", "structure", "molecule", "density", "sample", "vendor", "amount", "last_modified", "created", "decoupled", "inventory_sample")
+INVENTORY_HEADINGS = ("Short label", "Location", "Structure", "Molecule name", "Density", "Sample name", "Vendor", "Amount", "Last modified", "Created", "Decoupled", "Inventory")
 
 PRINT_CHECKLIST_KEYS = ("correct", "incorrect")
 
@@ -103,8 +103,8 @@ def displayed_row_value(row, key):
     if key == "density":
         value = row.get(key)
         return "" if value is None or str(value).strip() in {"", "—"} or is_zero_amount(value) else str(value)
-    if key == "last_modified":
-        return format_last_modified(row.get("last_modified_at", row.get(key)))
+    if key in {"last_modified", "created"}:
+        return format_last_modified(row.get(f"{key}_at", row.get(key)))
     return shown(row.get(key))
 
 
@@ -289,7 +289,9 @@ def inventory_row(sample, vendor=None, collection_id=None, synchronized=False):
             "inventory_sample": sample.get("inventory_sample") is True,
             "location": shown(sample.get("location") or container.get("name")),
             "last_modified": format_last_modified(sample.get("updated_at") or sample.get("modified_at")),
-            "last_modified_at": sample.get("updated_at") or sample.get("modified_at")}
+            "last_modified_at": sample.get("updated_at") or sample.get("modified_at"),
+            "created": format_last_modified(sample.get("created_at")),
+            "created_at": sample.get("created_at")}
 
 
 def apply_molecule_name_update(row, name, molecule_name_id):
