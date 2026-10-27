@@ -3,6 +3,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -65,6 +66,49 @@ def multi_selection_modifier(windowing_system):
 def minimum_window_size(screen_width, screen_height):
     """Leave room for window decorations and the taskbar on small displays."""
     return min(1050, max(320, screen_width - 80)), min(620, max(240, screen_height - 160))
+
+
+def _mac_launch_display_bounds():
+    """Return the pointer's display in macOS global, top-left coordinates."""
+    import ctypes
+
+    class Point(ctypes.Structure):
+        _fields_ = [("x", ctypes.c_double), ("y", ctypes.c_double)]
+
+    class Size(ctypes.Structure):
+        _fields_ = [("width", ctypes.c_double), ("height", ctypes.c_double)]
+
+    class Rect(ctypes.Structure):
+        _fields_ = [("origin", Point), ("size", Size)]
+
+    cg = ctypes.CDLL("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
+    cg.CGEventCreate.argtypes = [ctypes.c_void_p]
+    cg.CGEventCreate.restype = ctypes.c_void_p
+    cg.CGEventGetLocation.argtypes = [ctypes.c_void_p]
+    cg.CGEventGetLocation.restype = Point
+    cg.CGGetDisplaysWithPoint.argtypes = [
+        Point, ctypes.c_uint32, ctypes.POINTER(ctypes.c_uint32),
+        ctypes.POINTER(ctypes.c_uint32),
+    ]
+    cg.CGDisplayBounds.argtypes = [ctypes.c_uint32]
+    cg.CGDisplayBounds.restype = Rect
+    cf = ctypes.CDLL("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
+    cf.CFRelease.argtypes = [ctypes.c_void_p]
+    event = cg.CGEventCreate(None)
+    if not event:
+        return None
+    try:
+        point = cg.CGEventGetLocation(event)
+    finally:
+        cf.CFRelease(event)
+    display = ctypes.c_uint32()
+    count = ctypes.c_uint32()
+    if cg.CGGetDisplaysWithPoint(point, 1, ctypes.byref(display), ctypes.byref(count)) or not count.value:
+        return None
+    bounds = cg.CGDisplayBounds(display)
+    return tuple(round(value) for value in (
+        bounds.origin.x, bounds.origin.y, bounds.size.width, bounds.size.height,
+    ))
 
 
 def prevent_combobox_scroll_selection(_event=None):
@@ -389,6 +433,12 @@ class Inventorizer(tk.Tk):
     column_min_widths = {"label":85,"structure":70,"molecule":120,"density":70,"sample":110,"vendor":90,"amount":70,"location":120,"last_modified":105,"created":105,"decoupled":70,"inventory_sample":70}
     palettes = {False: {"base":"#f4f7f6","panel":"#ffffff","text":"#17211f","muted":"#52616c","accent":"#08756a","error":"#b42318"}, True: {"base":"#1c1c1e","panel":"#2c2c2e","text":"#f2f2f7","muted":"#aeaeb2","accent":"#41c7b3","error":"#ff6961"}}
     def __init__(self):
+        launch_display = None
+        if sys.platform == "darwin":
+            try:
+                launch_display = _mac_launch_display_bounds()
+            except (OSError, AttributeError):
+                pass
         username, password = saved_credentials(); client.CHEMOTION_USERNAME, client.CHEMOTION_PASSWORD = username, password
         super().__init__(); self.title(APP_NAME); self.minsize(1050, 620); self.rows = []; self.selected_row_ids = set(); self.location_filter_retained_row_ids = set(); self.sort_key = "label"; self.sort_reverse = False; self.location_filter = tk.StringVar(value="All locations"); self.collection_value = tk.StringVar(value="Choose collection…"); self.collection_choices = {}; self.logged_in = False; self.profile_settings = saved_profile_settings(); saved_server = self.profile_settings.get("chemotion_server", DEFAULT_CHEMOTION_URL); self.server_value = tk.StringVar(value=saved_server if isinstance(saved_server, str) else DEFAULT_CHEMOTION_URL); self.username_value = tk.StringVar(value=username); self.password_value = tk.StringVar(value=password); self.remember_credentials = tk.BooleanVar(value=True); self.amount_editor = None; self.editing_cell = None; self.edit_after_save = None; self.editing_rows = []; self.inventory_cancel_event = None; self.inventory_loading = False
         try: client.CHEMOTION_URL = normalized_chemotion_url(self.server_value.get())
@@ -415,7 +465,13 @@ class Inventorizer(tk.Tk):
         self.structure_svg_data = {}
         self.column_header_font = tkfont.nametofont("TkDefaultFont").copy()
         self.column_header_font.configure(size=12)
-        self.minsize(*minimum_window_size(self.winfo_screenwidth(), self.winfo_screenheight()))
+        self._startup_geometry = None
+        if launch_display:
+            x, y, width, height = launch_display
+            self._startup_geometry = f"{width}x{height - 50}+{x}+{y + 25}"
+            self.geometry(self._startup_geometry)
+        screen_size = launch_display[2:] if launch_display else (self.winfo_screenwidth(), self.winfo_screenheight())
+        self.minsize(*minimum_window_size(*screen_size))
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
         self.top = tk.Frame(self, padx=24, pady=18); self.top.grid(row=0, column=0, sticky="ew")
@@ -520,7 +576,7 @@ class Inventorizer(tk.Tk):
         self.cancel_load_button.pack(side="right", padx=(8, 0))
         self.bind("<Escape>", lambda _event: self.cancel_load_button.invoke(), add="+")
         self.apply_appearance(True); self.watch_system_appearance()
-        self.after_idle(lambda: self.state("zoomed"))
+        self.after_idle(self.maximize_window)
         if username and password and client.CHEMOTION_URL != DEFAULT_CHEMOTION_URL:
             # Defer until the window has been built so the app can paint before
             # the network request begins.
@@ -555,6 +611,17 @@ class Inventorizer(tk.Tk):
     def watch_system_appearance(self): self.apply_appearance(); self.after(1500,self.watch_system_appearance)
     def visible_column_keys(self):
         return tuple(key for key in self.column_order if self.column_visibility[key].get())
+    def maximize_window(self):
+        """Maximize on the display selected before Tk created the window."""
+        try:
+            if sys.platform == "darwin":
+                self.attributes("-zoomed", True)
+            else:
+                self.state("zoomed")
+        except tk.TclError:
+            if self._startup_geometry:
+                self.geometry(self._startup_geometry)
+
     def displayed_data_column_keys(self):
         return tuple(key for key in self.visible_column_keys() if key != "structure")
     def configure_visible_columns(self):
