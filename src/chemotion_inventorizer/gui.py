@@ -4,6 +4,7 @@ import os
 import re
 import subprocess
 import sys
+import sys
 import tempfile
 import threading
 import time
@@ -448,7 +449,16 @@ class Inventorizer(tk.Tk):
         self.column_visibility = {key: tk.BooleanVar(value=key in selected_columns) for key in self.keys}
         self.server_value.trace_add("write", self.connection_details_changed); self.username_value.trace_add("write", self.connection_details_changed); self.password_value.trace_add("write", self.connection_details_changed)
         icon_path = os.environ.get("CHEMOTION_INVENTORIZER_ICON")
-        if icon_path and Path(icon_path).is_file():
+        if sys.platform == "darwin":
+            # Use the launcher's native icon; iconphoto replaces it with a
+            # single PNG representation and changes its Dock rendering.
+            native_icon = Path(icon_path).with_name("ChemotionInventorizer.icns") if icon_path else None
+            if native_icon and native_icon.is_file():
+                self.tk.call("tk::mac::iconBitmap", "inventorizer", 512, 512,
+                             "-imageFile", str(native_icon))
+                self.iconbitmap("inventorizer")
+            # Standalone macOS bundles already supply their own native icon.
+        elif icon_path and Path(icon_path).is_file():
             self.app_icon = tk.PhotoImage(file=icon_path)
             self.iconphoto(True, self.app_icon)
         self.dark_mode = system_dark_mode(); self.style = InventoryStyle(self); self.colors = self.appearance_colors(self.dark_mode)
