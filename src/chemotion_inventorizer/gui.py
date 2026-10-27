@@ -78,6 +78,204 @@ def disable_combobox_scroll_selection(combobox):
         combobox.bind(sequence, prevent_combobox_scroll_selection)
 
 
+class InventoryStyle(ttk.Style):
+    """Keep pixel scrolling in sync with changes to the table's row size."""
+
+    pixel_tree = None
+
+    def configure(self, style, query_opt=None, **kwargs):
+        result = super().configure(style, query_opt, **kwargs)
+        if style == "Inventory.Treeview" and "rowheight" in kwargs and self.pixel_tree:
+            self.pixel_tree.set_row_height(kwargs["rowheight"])
+        return result
+
+
+class InventoryTreeview(ttk.Treeview):
+    """Use Tk 9 item heights to make vertical scroll units single pixels."""
+
+    def __init__(self, master, **kwargs):
+        super().__init__(master, **kwargs)
+        self.pixel_scrolling = int(self.tk.call("package", "provide", "Tk").split(".")[0]) >= 9
+        self.row_pixels = 1
+        self.partial_frame = None
+        self.partial_refresh = None
+        if self.pixel_scrolling:
+            style = ttk.Style(self)
+            style.configure("Pixel.Inventory.Treeview", rowheight=1)
+            self.configure(style="Pixel.Inventory.Treeview")
+            self.partial_frame = ttk.Frame(self)
+            self.partial_tree = ttk.Treeview(self.partial_frame, style="Pixel.Inventory.Treeview")
+            self.partial_tree.bindtags((str(self.partial_tree),))
+            for sequence in ("<ButtonPress-1>", "<ButtonRelease-1>", "<Double-Button-1>",
+                             "<Motion>", "<B1-Motion>", "<MouseWheel>",
+                             "<Shift-MouseWheel>", "<Option-MouseWheel>", "<TouchpadScroll>"):
+                self.partial_tree.bind(sequence, lambda event, seq=sequence: self.forward_partial_event(event, seq))
+            for sequence in ("<Configure>", "<Expose>", "<<TreeviewSelect>>"):
+                self.bind(sequence, self.queue_partial_refresh, add="+")
+
+    def configure(self, cnf=None, **kwargs):
+        for option in ("yscrollcommand", "xscrollcommand"):
+            if option in kwargs and getattr(self, "pixel_scrolling", False):
+                callback = kwargs[option]
+
+                def changed(first, last, callback=callback):
+                    self.queue_partial_refresh()
+                    if callable(callback):
+                        callback(first, last)
+                    elif callback:
+                        self.tk.call(callback, first, last)
+
+                kwargs[option] = changed
+        return super().configure(cnf, **kwargs)
+
+    def forward_partial_event(self, event, sequence):
+        options = {"x": event.x_root - self.winfo_rootx(),
+                   "y": event.y_root - self.winfo_rooty(), "state": event.state}
+        if "Wheel" in sequence or "Touchpad" in sequence:
+            options["delta"] = event.delta
+        # Tk cannot synthesize a Double modifier; normal presses retain its
+        # own double-click recognition on the main widget.
+        self.event_generate(sequence.replace("Double-", ""), **options)
+        return "break"
+
+    def queue_partial_refresh(self, _event=None):
+        if self.partial_frame is not None and self.partial_refresh is None:
+            self.partial_refresh = self.after_idle(self.draw_partial_row)
+
+    def draw_partial_row(self):
+        self.partial_refresh = None
+        children = self.get_children()
+        if not children:
+            self.partial_frame.place_forget()
+            return
+        position = round(self.yview()[0] * len(children) * self.row_pixels)
+        index, offset = divmod(position, self.row_pixels)
+        if not offset or index >= len(children):
+            self.partial_frame.place_forget()
+            return
+        # The next row still has a native bbox; its top locates the body edge.
+        next_box = super().bbox(children[index + 1]) if index + 1 < len(children) else ()
+        if not next_box:
+            self.partial_frame.place_forget()
+            return
+        top = next_box[1] - (self.row_pixels - offset)
+        row = children[index]
+        overlay = self.partial_tree
+        overlay.configure(columns=self.cget("columns"), displaycolumns=self.cget("displaycolumns"),
+                          show="tree" if "tree" in map(str, self.tk.splitlist(self.cget("show"))) else "")
+        for column in ("#0", *self.tk.splitlist(self.cget("columns"))):
+            options = self.column(column)
+            overlay.column(column, width=options["width"], minwidth=options["width"],
+                           stretch=False, anchor=options["anchor"])
+        for tag in self.item(row, "tags"):
+            overlay.tag_configure(tag, **self.tag_configure(tag))
+        options = self.item(row)
+        options = {key: options[key] for key in ("text", "image", "values", "tags", "open")}
+        if overlay.exists("partial"):
+            overlay.item("partial", **options)
+        else:
+            overlay.insert("", "end", iid="partial", **options)
+        overlay.tk.call(overlay, "item", "partial", "-height", self.row_pixels)
+        overlay.selection_set("partial" if row in self.selection() else ())
+        self.partial_frame.place(x=0, y=top, width=self.winfo_width(), height=self.row_pixels - offset)
+        overlay.place(x=0, y=-offset, width=self.winfo_width(), height=self.row_pixels + 4)
+        overlay.xview_moveto(self.xview()[0])
+        self.partial_frame.lift()
+
+    def set_row_height(self, height):
+        if self.pixel_scrolling:
+            self.row_pixels = height
+            for item in self.get_children():
+                self.tk.call(self, "item", item, "-height", height)
+            self.queue_partial_refresh()
+
+    def insert(self, parent, index, iid=None, **kwargs):
+        if self.pixel_scrolling:
+            kwargs["height"] = self.row_pixels
+        return super().insert(parent, index, iid=iid, **kwargs)
+
+
+class TableScrollAnimation:
+    """Spread input motion across redraws while retaining fractional pixels."""
+
+    def __init__(self, tree):
+        self.tree = tree
+        self.pending = {"x": 0.0, "y": 0.0}
+        self.timer = None
+        self.closed = False
+
+    def add(self, axis, distance):
+        if self.closed:
+            return
+        if distance * self.pending[axis] < 0:
+            self.pending[axis] = 0.0
+        self.pending[axis] += distance
+        if self.timer is None and any(abs(value) >= 1 for value in self.pending.values()):
+            self.timer = self.tree.after(8, self.tick)
+
+    def tick(self):
+        self.timer = None
+        if self.closed:
+            return
+        for axis, distance in self.pending.items():
+            if abs(distance) < 1:
+                continue
+            step = max(1, int(abs(distance) * 0.35)) * (1 if distance > 0 else -1)
+            self.pending[axis] -= step
+            getattr(self.tree, axis + "view_scroll")(step, "units")
+        if any(abs(value) >= 1 for value in self.pending.values()):
+            self.timer = self.tree.after(8, self.tick)
+
+    def destroy(self, event):
+        if event.widget == self.tree:
+            self.closed = True
+            if self.timer is not None:
+                self.tree.after_cancel(self.timer)
+                self.timer = None
+
+
+def enable_table_smooth_scrolling(tree):
+    """Retain small wheel deltas instead of rounding every gesture to a row."""
+    system = tree.tk.call("tk", "windowingsystem")
+    remainder = {"x": 0.0, "y": 0.0}
+    animation = TableScrollAnimation(tree) if getattr(tree, "pixel_scrolling", False) else None
+    if animation:
+        tree.bind("<Destroy>", animation.destroy, add="+")
+
+        def touchpad(event):
+            # Handle every event; Tk's default binding only uses every fifth.
+            dx, dy = tree.tk.splitlist(tree.tk.call("tk::PreciseScrollDeltas", event.delta))
+            animation.add("x", -float(dx) / 5)
+            animation.add("y", -float(dy) / 5)
+            return "break"
+
+        tree.bind("<TouchpadScroll>", touchpad)
+
+    def scroll(event, axis):
+        if getattr(tree, "pixel_scrolling", False):
+            scale = 0.25 if system == "aqua" else 10 / 120
+        else:
+            scale = 0.1 if system == "aqua" else 1 / 120
+        delta = -event.delta * scale
+        if animation:
+            animation.add(axis, delta)
+            return "break"
+        # A reversed gesture should respond without consuming leftover motion.
+        if delta * remainder[axis] < 0:
+            remainder[axis] = 0.0
+        remainder[axis] += delta
+        steps = int(remainder[axis])
+        remainder[axis] -= steps
+        if steps:
+            getattr(tree, axis + "view_scroll")(steps, "units")
+        return "break"
+
+    tree.bind("<MouseWheel>", lambda event: scroll(event, "y"))
+    tree.bind("<Shift-MouseWheel>", lambda event: scroll(event, "x"))
+    if system == "aqua":
+        tree.bind("<Option-MouseWheel>", lambda event: scroll(event, "x"))
+
+
 def inverted_structure_png(image_data, width, height):
     """Invert thumbnail RGB channels while preserving transparency."""
     import resvg_py
@@ -203,7 +401,7 @@ class Inventorizer(tk.Tk):
         if icon_path and Path(icon_path).is_file():
             self.app_icon = tk.PhotoImage(file=icon_path)
             self.iconphoto(True, self.app_icon)
-        self.dark_mode = system_dark_mode(); self.style = ttk.Style(self); self.colors = self.appearance_colors(self.dark_mode)
+        self.dark_mode = system_dark_mode(); self.style = InventoryStyle(self); self.colors = self.appearance_colors(self.dark_mode)
         self.sample_list_font = tkfont.nametofont("TkDefaultFont").copy()
         saved_font_size = self.profile_settings.get("table_font_size", 18)
         if type(saved_font_size) is not int or not 8 <= saved_font_size <= 48:
@@ -266,8 +464,10 @@ class Inventorizer(tk.Tk):
         self.queued_exports = 0
         self.structure_image_variants = {}
         self.structure_images = {}; self.structure_image_pending = set(); self.structure_image_queue = deque(); self.structure_image_queue_lock = threading.Lock(); self.structure_image_worker_active = False; self.structure_image_waiters = {}; self.structure_rows_pending = set()
-        frame = ttk.Frame(self, padding=(12, 12, 12, 0), style="Inventory.TFrame"); frame.grid(row=1, column=0, sticky="nsew", padx=24); self.tree = ttk.Treeview(frame, columns=self.keys, displaycolumns=self.displayed_data_column_keys(), show="tree headings" if self.column_visibility["structure"].get() else "headings", style="Inventory.Treeview", selectmode="extended")
+        frame = ttk.Frame(self, padding=(12, 12, 12, 0), style="Inventory.TFrame"); frame.grid(row=1, column=0, sticky="nsew", padx=24); self.tree = InventoryTreeview(frame, columns=self.keys, displaycolumns=self.displayed_data_column_keys(), show="tree headings" if self.column_visibility["structure"].get() else "headings", style="Inventory.Treeview", selectmode="extended")
+        self.style.pixel_tree = self.tree
         self.tree.bind("<<TreeviewSelect>>", self.remember_selection)
+        enable_table_smooth_scrolling(self.tree)
         self.bind("<KeyPress>", self.select_row_by_typing, add="+")
         for field in (self.server_entry, self.username_entry, self.password_entry,
                       self.collection_menu, self.location_filter_menu,
