@@ -5,6 +5,7 @@ import re
 import subprocess
 import tempfile
 import threading
+import time
 import webbrowser
 import base64
 from collections import deque
@@ -255,6 +256,11 @@ class Inventorizer(tk.Tk):
         self.structure_images = {}; self.structure_image_pending = set(); self.structure_image_queue = deque(); self.structure_image_queue_lock = threading.Lock(); self.structure_image_worker_active = False; self.structure_image_waiters = {}; self.structure_rows_pending = set()
         frame = ttk.Frame(self, padding=(12, 12, 12, 0), style="Inventory.TFrame"); frame.grid(row=1, column=0, sticky="nsew", padx=24); self.tree = ttk.Treeview(frame, columns=self.keys, displaycolumns=self.displayed_data_column_keys(), show="tree headings" if self.column_visibility["structure"].get() else "headings", style="Inventory.Treeview", selectmode="extended")
         self.tree.bind("<<TreeviewSelect>>", self.remember_selection)
+        self.bind("<KeyPress>", self.select_row_by_typing, add="+")
+        for field in (self.server_entry, self.username_entry, self.password_entry,
+                      self.collection_menu, self.location_filter_menu,
+                      self.font_size_spinbox, self.structure_size_spinbox):
+            field.bind("<Escape>", self.defocus_field)
         self.tree.bind("<Command-a>", self.select_all_visible)
         self.tree.bind("<Delete>", self.delete_selected_row)
         self.tree.bind(f"<{multi_selection_modifier(self.tk.call('tk', 'windowingsystem'))}-Button-1>", self.extend_edit_selection)
@@ -743,6 +749,51 @@ class Inventorizer(tk.Tk):
             arrow = " ▼" if self.sort_reverse else " ▲"
             self.tree.heading(key, text=f"{heading}{arrow}" if key == self.sort_key else heading)
     def sort_by(self,key): self.sort_reverse = not self.sort_reverse if self.sort_key == key else False; self.sort_key = key; self.update_sort_headings(); self.render_rows()
+    def defocus_field(self, event):
+        if event.widget == self.amount_editor:
+            self.cancel_amount_edit()
+        self.typing_prefix = ""
+        self.tree.focus_set()
+        return "break"
+    def clear_text_filter(self, _event=None):
+        self.text_filter.set("")
+        self.typing_prefix = ""
+        self.tree.focus_set()
+        return "break"
+    def select_row_by_typing(self, event):
+        # Toplevel bindings also receive events from child widgets and dialogs.
+        widget = event.widget
+        if widget.winfo_toplevel() != self:
+            return
+        if widget.winfo_class() in ("Entry", "TEntry", "Spinbox", "TSpinbox", "Text", "TCombobox"):
+            self.typing_prefix = ""
+            return
+        # Leave Control/Command shortcuts and navigation keys to Tk.
+        command_mask = 0x8 if self.tk.call("tk", "windowingsystem") == "aqua" else 0
+        if event.state & (0x4 | command_mask) or not event.char or not event.char.isprintable():
+            return
+        now = time.monotonic()
+        context = (self.sort_key, self.sort_reverse)
+        prefix = getattr(self, "typing_prefix", "")
+        if now - getattr(self, "typing_time", 0) > 1.0 or context != getattr(self, "typing_context", None):
+            prefix = ""
+        prefix += event.char.casefold()
+        self.typing_prefix, self.typing_time, self.typing_context = prefix, now, context
+        candidates = [(str(self.tree.set(item, self.sort_key)).strip().casefold(), item)
+                      for item in self.tree.get_children()]
+        candidates = [(value, item) for value, item in candidates if value]
+        if not candidates:
+            return
+        matches = [item for value, item in candidates if value.startswith(prefix)]
+        if matches:
+            target = matches[0]
+        else:
+            ordered = sorted(candidates, key=lambda candidate: candidate[0])
+            target = next((item for value, item in ordered if value >= prefix), ordered[-1][1])
+        self.tree.selection_set(target)
+        self.tree.focus(target)
+        self.tree.see(target)
+        return "break"
     def update_location_filter(self):
         locations = location_choices(self.rows)
         choices = ("All locations", *locations); self.location_filter_menu.configure(values=choices)
@@ -1035,7 +1086,7 @@ class Inventorizer(tk.Tk):
         self.amount_editor = editor
         editor.focus_set(); editor.selection_range(0, "end")
         editor.bind("<Return>", lambda _event: self.finish_amount_edit(row, advance=True))
-        editor.bind("<Escape>", lambda _event: self.cancel_amount_edit())
+        editor.bind("<Escape>", self.defocus_field)
         self.bind_editor_navigation(editor, item_id)
         editor.bind("<FocusOut>", lambda _event: self.finish_amount_edit(row))
         return "break"
@@ -1049,7 +1100,7 @@ class Inventorizer(tk.Tk):
         self.place_editor(editor, item_id, "vendor"); self.amount_editor = editor
         editor.focus_set(); editor.selection_range(0, "end")
         editor.bind("<Return>", lambda _event: self.finish_vendor_edit(row, advance=True))
-        editor.bind("<Escape>", lambda _event: self.cancel_amount_edit())
+        editor.bind("<Escape>", self.defocus_field)
         self.bind_editor_navigation(editor, item_id)
         editor.bind("<FocusOut>", lambda _event: self.finish_vendor_edit(row))
         return "break"
@@ -1065,7 +1116,7 @@ class Inventorizer(tk.Tk):
         editor.focus_set(); editor.selection_range(0, "end")
         editor.bind("<Return>", lambda _event: self.finish_location_edit(row, advance=True))
         editor.bind("<<ComboboxSelected>>", lambda _event: self.finish_location_edit(row))
-        editor.bind("<Escape>", lambda _event: self.cancel_amount_edit())
+        editor.bind("<Escape>", self.defocus_field)
         self.bind_editor_navigation(editor, item_id)
         editor.bind("<FocusOut>", lambda _event: self.finish_location_edit(row))
         return "break"
@@ -1081,7 +1132,7 @@ class Inventorizer(tk.Tk):
         self.amount_editor = editor
         editor.focus_set(); editor.selection_range(0, "end")
         editor.bind("<Return>", lambda _event: self.finish_amount_edit(row, advance=True))
-        editor.bind("<Escape>", lambda _event: self.cancel_amount_edit())
+        editor.bind("<Escape>", self.defocus_field)
         self.bind_editor_navigation(editor, item_id)
         editor.bind("<FocusOut>", lambda _event: self.finish_amount_edit(row))
         return "break"
@@ -1095,7 +1146,7 @@ class Inventorizer(tk.Tk):
         self.place_editor(editor, item_id, field); self.amount_editor = editor
         editor.focus_set(); editor.selection_range(0, "end")
         editor.bind("<Return>", lambda _event: self.finish_name_edit(row, field, advance=True))
-        editor.bind("<Escape>", lambda _event: self.cancel_amount_edit())
+        editor.bind("<Escape>", self.defocus_field)
         self.bind_editor_navigation(editor, item_id)
         editor.bind("<FocusOut>", lambda _event: self.finish_name_edit(row, field))
         return "break"

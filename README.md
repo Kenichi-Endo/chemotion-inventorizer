@@ -60,6 +60,7 @@ If macOS says **“Chemotion Inventorizer.app” cannot be opened**:
 - Launch the app.
 - If you need only the newest samples, press Esc to stop loading samples.
 - To filter entries by location, select **Location**.
+- Type while outside an input field to select rows by the sorted column.
 - To edit one sample, click a cell. For **Location**, an existing location can be chosen from the dropdown. For **Amount**, include a unit such as `250 mg`. Press (Shift+)Return/Enter or Tab to save directly to Chemotion and move to the next cell, or Esc to cancel.
 - To edit multiple samples, use Command/Ctrl-click to select multiple samples, or Shift-click to select a range. Edit a cell in the selection to apply the value to all selected rows.
 - To check or edit a sample in Chemotion, double-click a structure or short label.
