@@ -204,7 +204,7 @@ class ChemotionClient:
         # only leaves, while preserving every nested selectable collection.
         leaves = (item for item in found.values() if not item.get("children"))
         return sorted(leaves, key=lambda item: str(item.get("label") or "").casefold())
-    def inventory(self, collection_id, synchronized=False, progress=None, cancelled=None, rows_loaded=None, sequential=False):
+    def inventory(self, collection_id, synchronized=False, progress=None, cancelled=None, rows_loaded=None, sequential=False, row_ready=None):
         """Retrieve the inventory, reporting progress through ``progress``."""
         def check_cancelled():
             if cancelled and cancelled.is_set():
@@ -227,6 +227,8 @@ class ChemotionClient:
         # designed to be shared between threads.
         if not samples: return []
         samples.sort(key=lambda sample: natural_sort_value(shown(sample.get("short_label"))), reverse=True)
+        positions = {sample["id"]: position for position, sample in enumerate(samples)}
+        rows = [None] * len(samples)
         worker_state = threading.local()
         def retrieve_sample(sample):
             check_cancelled()
@@ -234,9 +236,14 @@ class ChemotionClient:
             if client is None:
                 client = ChemotionClient(); client.login(); worker_state.client = client
             check_cancelled()
-            return client.inventory_entry(sample["id"], collection_id, synchronized, sample)
+            row = client.inventory_entry(sample["id"], collection_id, synchronized, sample)
+            row["_inventory_position"] = positions[sample["id"]]
+            # Retain retrieved details even if Stop interrupts thumbnail display.
+            rows[positions[sample["id"]]] = row
+            if row_ready:
+                row_ready([row])
+            return row
 
-        rows = [None] * len(samples)
         workers = 1 if sequential else min(MAX_CONCURRENT_SAMPLE_REQUESTS, len(samples))
         executor = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="sample-retrieval")
         try:
@@ -251,7 +258,10 @@ class ChemotionClient:
                 done, pending = wait(pending, timeout=0.1, return_when=FIRST_COMPLETED)
                 batch_rows = []
                 for future in done:
-                    rows[futures[future]] = future.result()
+                    try:
+                        rows[futures[future]] = future.result()
+                    except InventoryLoadCancelled:
+                        raise InventoryLoadCancelled([row for row in rows if row is not None])
                     batch_rows.append(rows[futures[future]])
                     completed += 1
                     if progress: progress(f"Retrieving sample information: {completed} of {len(samples)}…")

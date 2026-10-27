@@ -688,7 +688,8 @@ class Inventorizer(tk.Tk):
                         return
             rows = ChemotionClient().inventory(collection["id"], collection.get("_synchronized", False),
                                                 lambda message: self.after(0, self._progress, message, cancelled), cancelled,
-                                                deliver_rows, sequential=with_structures)
+                                                rows_loaded=None if with_structures else deliver_rows,
+                                                row_ready=deliver_rows if with_structures else None)
             self.after(0, self._loaded, rows, cancelled)
         except InventoryLoadCancelled as stopped:
             self.after(0, self._cancelled, cancelled, stopped.rows)
@@ -867,6 +868,21 @@ class Inventorizer(tk.Tk):
                 return last_modified_sort_value(item.get(f"{key}_at"))
             return str(item[key]).casefold()
         rows = self.filtered_rows()
+        if getattr(self, "inventory_loading", False) and any("_inventory_position" in row for row in self.rows):
+            # Concurrent details and thumbnails can finish in any order. Only
+            # reveal the uninterrupted ready prefix of the original sample list.
+            available = {row["_inventory_position"]: row for row in self.rows
+                         if "_inventory_position" in row}
+            ready_ids = set()
+            position = 0
+            with_structures = self.column_visibility["structure"].get()
+            while position in available:
+                row = available[position]
+                if with_structures and row["id"] in self.structure_rows_pending:
+                    break
+                ready_ids.add(row["id"])
+                position += 1
+            rows = [row for row in rows if row["id"] in ready_ids]
         if self.column_visibility["structure"].get():
             rows = [row for row in rows if row["id"] not in self.structure_rows_pending]
         if preserve_display_order:
@@ -907,18 +923,22 @@ class Inventorizer(tk.Tk):
         # Unicode mathematical "bold" digits, which macOS renders in another face.
         return (str(row["label"]), row["location"], displayed_row_value(row, "structure"), row["molecule"], displayed_row_value(row, "density"), row["sample"], row["vendor"], row["amount"], displayed_row_value(row, "last_modified"), displayed_row_value(row, "created"), checkbox(row["decoupled"]), checkbox(row["inventory_sample"]))
     def load_structure_images(self, rows):
-        """Queue missing structures and fetch them serially as rows appear."""
+        """Queue missing structures with at most eight image workers."""
         with self.structure_image_queue_lock:
+            added = 0
             for row in rows:
                 source = row.get("structure")
                 if (source and source not in self.structure_images
                         and source not in self.structure_image_pending):
                     self.structure_image_pending.add(source)
                     self.structure_image_queue.append(source)
-            if not self.structure_image_queue or self.structure_image_worker_active:
-                return
-            self.structure_image_worker_active = True
-        threading.Thread(target=self._load_structure_images, daemon=True).start()
+                    added += 1
+            active = getattr(self, "structure_image_worker_count", 0)
+            workers = min(added, client.MAX_CONCURRENT_SAMPLE_REQUESTS - active)
+            self.structure_image_worker_count = active + workers
+            self.structure_image_worker_active = self.structure_image_worker_count > 0
+        for _ in range(workers):
+            threading.Thread(target=self._load_structure_images, daemon=True).start()
     def _load_structure_images(self):
         client = None
         try:
@@ -927,14 +947,16 @@ class Inventorizer(tk.Tk):
             with self.structure_image_queue_lock:
                 failed_sources = tuple(self.structure_image_queue)
                 self.structure_image_queue.clear()
-                self.structure_image_worker_active = False
+                self.structure_image_worker_count -= 1
+                self.structure_image_worker_active = self.structure_image_worker_count > 0
             message = f"SVG renderer could not load ({error}). Restart using the application launcher to set up dependencies."
             self.after(0, self._structure_image_dependency_missing, failed_sources, message)
             return
         while True:
             with self.structure_image_queue_lock:
                 if not self.structure_image_queue:
-                    self.structure_image_worker_active = False
+                    self.structure_image_worker_count -= 1
+                    self.structure_image_worker_active = self.structure_image_worker_count > 0
                     return
                 source = self.structure_image_queue.popleft()
             try:

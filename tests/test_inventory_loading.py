@@ -87,7 +87,7 @@ def test_stop_preserves_completed_details(monkeypatch):
     try:
         with pytest.raises(api_client.InventoryLoadCancelled) as stopped:
             client.inventory(42, progress=progress, cancelled=cancelled)
-        assert stopped.value.rows == [{"id": 10}]
+        assert stopped.value.rows == [{"id": 10, "_inventory_position": 0}]
     finally:
         release.set()
 
@@ -112,7 +112,7 @@ def test_completed_rows_are_delivered_before_loading_finishes(monkeypatch):
     try:
         with pytest.raises(api_client.InventoryLoadCancelled) as stopped:
             client.inventory(42, cancelled=cancelled, rows_loaded=rows_loaded)
-        assert delivered == [{"id": 10}]
+        assert delivered == [{"id": 10, "_inventory_position": 0}]
         assert delivered == stopped.value.rows
     finally:
         release.set()
@@ -219,8 +219,12 @@ def test_structure_sources_queue_once_in_arrival_order(monkeypatch):
 
     assert list(viewer.structure_image_queue) == ["first.svg", "second.svg"]
     assert viewer.structure_image_pending == {"first.svg", "second.svg"}
-    assert len(workers) == 1
-    assert workers[0][1] is True
+    assert len(workers) == 2
+    assert all(daemon for _, daemon in workers)
+    app.Inventorizer.load_structure_images(viewer, [
+        {"structure": f"extra-{number}.svg"} for number in range(20)
+    ])
+    assert len(workers) == 8
 
 
 def test_stop_retains_rows_already_rendered_before_cancellation():
@@ -267,6 +271,38 @@ def test_sequential_inventory_waits_for_thumbnail_acknowledgement(monkeypatch):
     assert [row["id"] for row in result] == [10, 2, 1]
 
 
+def test_eight_samples_wait_for_structures_before_more_samples_start(monkeypatch):
+    client = prepare_client(monkeypatch)
+    monkeypatch.setattr(api_client, "MAX_CONCURRENT_SAMPLE_REQUESTS", 8)
+    monkeypatch.setattr(api_client.ChemotionClient, "request", lambda self, path: json.dumps({
+        "samples": [{"id": number, "short_label": f"S{number}"} for number in range(12)],
+        "samples_count": 12,
+    }).encode())
+    ready = threading.Event()
+    displayed = threading.Event()
+    lock = threading.Lock()
+    arrivals = []
+    result = []
+
+    def row_ready(rows):
+        with lock:
+            arrivals.append(rows[0]["id"])
+            if len(arrivals) == 8:
+                ready.set()
+        assert displayed.wait(2)
+
+    worker = threading.Thread(target=lambda: result.extend(client.inventory(42, row_ready=row_ready)))
+    worker.start()
+    try:
+        assert ready.wait(2)
+        assert len(arrivals) == 8
+    finally:
+        displayed.set()
+        worker.join(2)
+    assert not worker.is_alive()
+    assert [row["id"] for row in result] == list(reversed(range(12)))
+
+
 def test_stop_releases_wait_for_thumbnail_and_keeps_sample(monkeypatch):
     prepare_client(monkeypatch)
     cancelled = threading.Event()
@@ -299,7 +335,38 @@ def test_stop_releases_wait_for_thumbnail_and_keeps_sample(monkeypatch):
     assert not worker.is_alive()
     assert not errors
     assert started == [10]
-    assert retained == [{"id": 10}]
+    assert retained == [{"id": 10, "_inventory_position": 0}]
+
+
+def test_ready_rows_wait_for_all_preceding_details_and_thumbnails():
+    inserted = {}
+    viewer = SimpleNamespace(
+        rows=[], inventory_loading=True,
+        column_visibility={"structure": SimpleNamespace(get=lambda: True)},
+        structure_rows_pending=set(), structure_images={},
+        sort_key="label", sort_reverse=True,
+        row_values=lambda row: (row["label"],),
+        tree=SimpleNamespace(
+            get_children=lambda: tuple(inserted),
+            delete=lambda item: inserted.pop(item),
+            insert=lambda parent, index, iid, **kwargs: inserted.update({iid: kwargs}),
+            item=lambda iid, **kwargs: inserted[iid].update(kwargs),
+            move=lambda *args: None,
+        ),
+    )
+    viewer.filtered_rows = lambda: viewer.rows
+    second = {"id": 2, "label": "S2", "_inventory_position": 1}
+    first = {"id": 10, "label": "S10", "_inventory_position": 0}
+    viewer.rows.append(second)
+    app.Inventorizer.render_rows(viewer)
+    assert not inserted
+    viewer.rows.append(first)
+    viewer.structure_rows_pending.add(10)
+    app.Inventorizer.render_rows(viewer)
+    assert not inserted
+    viewer.structure_rows_pending.clear()
+    app.Inventorizer.render_rows(viewer)
+    assert list(inserted) == ["10", "2"]
 
 
 def test_thumbnail_acknowledgement_follows_image_assignment_and_idle_redraw(monkeypatch):
