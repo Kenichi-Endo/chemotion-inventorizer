@@ -245,6 +245,18 @@ class Inventorizer(tk.Tk):
         column_labels = dict(zip(self.keys, self.headings))
         selector_keys = self.column_menu_order
         for key in selector_keys: self.columns_menu.add_checkbutton(label=column_labels[key], variable=self.column_visibility[key], command=lambda key=key: self.toggle_column(key))
+        self.text_filter = tk.StringVar()
+        ttk.Label(self.location_controls, text="Filter:").pack(side="left", padx=(12, 0))
+        self.filter_display = tk.StringVar(value="regex")
+        self.updating_filter_display = False
+        self.filter_entry = ttk.Entry(self.location_controls, textvariable=self.filter_display, width=18,
+                                      foreground="gray")
+        self.filter_entry.pack(side="left", padx=4)
+        self.filter_display.trace_add("write", self.filter_display_changed)
+        self.filter_entry.bind("<FocusIn>", self.update_filter_placeholder)
+        self.filter_entry.bind("<FocusOut>", self.update_filter_placeholder)
+        self.filter_entry.bind("<Escape>", self.clear_text_filter)
+        self.text_filter.trace_add("write", self.filter_by_text)
         ttk.Label(self.location_controls, text="Location:").pack(side="left", padx=(12,0)); self.location_filter_menu = ttk.Combobox(self.location_controls, textvariable=self.location_filter, values=("All locations",), state="readonly", width=18); self.location_filter_menu.pack(side="left", padx=4); self.location_filter_menu.bind("<<ComboboxSelected>>", self.filter_by_location); disable_combobox_scroll_selection(self.location_filter_menu)
         self.print_button = ttk.Button(self.location_controls, text="Print…", command=self.printable, state="disabled"); self.print_button.pack(side="left", padx=4)
         self.export_button = ttk.Button(self.location_controls, text="Export collection…", command=self.export_collection, state="disabled")
@@ -294,6 +306,8 @@ class Inventorizer(tk.Tk):
         self.update_sort_headings()
         for key, width in self.column_widths.items(): self.tree.column(key, width=width, minwidth=self.column_min_widths[key], stretch=False, anchor="center" if key in {"decoupled", "inventory_sample"} else "w")
         self.restore_column_widths()
+        if getattr(self, "text_filter", None) is not None and self.text_filter.get():
+            self.filter_by_text()
         vertical = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview); horizontal = ttk.Scrollbar(frame, orient="horizontal", command=self.tree.xview); self.vertical_scrollbar = vertical; self.horizontal_scrollbar = horizontal; self.tree.configure(yscrollcommand=self.tree_yview_changed, xscrollcommand=self.tree_xview_changed)
         self.tree.grid(row=0,column=0,sticky="nsew"); vertical.grid(row=0,column=1,sticky="ns"); horizontal.grid(row=1,column=0,sticky="ew"); frame.columnconfigure(0,weight=1); frame.rowconfigure(0,weight=1)
         self.progress_area = tk.Frame(self, padx=24); self.progress_area.grid(row=2, column=0, sticky="ew", pady=(0, 18))
@@ -755,11 +769,6 @@ class Inventorizer(tk.Tk):
         self.typing_prefix = ""
         self.tree.focus_set()
         return "break"
-    def clear_text_filter(self, _event=None):
-        self.text_filter.set("")
-        self.typing_prefix = ""
-        self.tree.focus_set()
-        return "break"
     def select_row_by_typing(self, event):
         # Toplevel bindings also receive events from child widgets and dialogs.
         widget = event.widget
@@ -808,8 +817,45 @@ class Inventorizer(tk.Tk):
         if self.column_visibility["structure"].get() and not self.inventory_loading:
             self.load_structure_images(self.filtered_rows())
         self.status.configure(text=f"{count} samples", fg=self.colors["muted"])
+    def update_filter_placeholder(self, _event=None):
+        placeholder = not self.text_filter.get() and self.focus_get() != self.filter_entry
+        self.updating_filter_display = True
+        try:
+            value = "regex" if placeholder else self.text_filter.get()
+            if self.filter_display.get() != value:
+                self.filter_display.set(value)
+            self.filter_entry.configure(foreground="gray" if placeholder else "")
+        finally:
+            self.updating_filter_display = False
+    def filter_display_changed(self, *_args):
+        if not self.updating_filter_display:
+            self.text_filter.set(self.filter_display.get())
+    def clear_text_filter(self, _event=None):
+        self.text_filter.set("")
+        self.typing_prefix = ""
+        self.tree.focus_set()
+        return "break"
+    def filter_by_text(self, *_args):
+        self.update_filter_placeholder()
+        self.filter_by_location()
+        try:
+            re.compile(self.text_filter.get())
+        except re.error as error:
+            self.status.configure(text=f"Invalid regex: {error}", fg=self.colors["muted"])
     def filtered_rows(self):
-        return rows_for_location_filter(self.rows, self.location_filter.get(), self.location_filter_retained_row_ids)
+        rows = rows_for_location_filter(self.rows, self.location_filter.get(), self.location_filter_retained_row_ids)
+        text_filter = getattr(self, "text_filter", None)
+        if text_filter is None or not text_filter.get():
+            return rows
+        try:
+            pattern = re.compile(text_filter.get(), re.IGNORECASE)
+        except re.error:
+            return []
+        visible_keys = set(self.visible_column_keys()) - {"structure"}
+        return [row for row in rows if any(
+            pattern.search(str(value))
+            for key, value in zip(self.keys, self.row_values(row)) if key in visible_keys
+        )]
     def render_rows(self, preserve_display_order=False):
         existing_ids = self.tree.get_children()
         displayed_ids = existing_ids if preserve_display_order else ()
