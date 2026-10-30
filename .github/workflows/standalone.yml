@@ -38,7 +38,8 @@ jobs:
       - if: runner.os == 'macOS'
         run: brew install libmagic
       - run: python -m pip install -e ".[dev,standalone]"
-      - run: python -m pytest -q
+      - run: python -m pytest -vv -o faulthandler_timeout=60
+        timeout-minutes: 5
       - run: python scripts/build_standalone.py
       - uses: actions/upload-artifact@v4
         with:
