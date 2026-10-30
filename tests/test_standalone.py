@@ -2,8 +2,45 @@
 
 import json
 import pytest
+import zipfile
+from types import SimpleNamespace
 
 from chemotion_inventorizer import standalone
+
+
+@pytest.mark.parametrize("embedded", [False, True])
+def test_frozen_windows_check_accepts_embedded_tcl_tk_libraries(tmp_path, monkeypatch, embedded):
+    # Load application dependencies before simulating Windows on another host.
+    from chemotion_inventorizer import gui
+    import tkinter
+
+    package = tmp_path / "chemotion_inventorizer"
+    assets = package / "assets"
+    assets.mkdir(parents=True)
+    (assets / "icon.png").touch()
+    library = tmp_path / "tcl9tk90.dll"
+    library.write_bytes(b"MZ fake DLL prefix")
+    if embedded:
+        with zipfile.ZipFile(library, "a") as archive:
+            archive.writestr("tk_library/tk.tcl", "# Tk initialization")
+    interpreter = SimpleNamespace(
+        eval=lambda expression: "//zipfs:/lib/tcl/tcl_library" if expression == "info library" else "9.0.4",
+        call=lambda *args: int(args[-1] == "//zipfs:/lib/tcl/tcl_library/init.tcl"),
+    )
+    monkeypatch.setattr(tkinter, "Tcl", lambda: interpreter)
+    monkeypatch.setattr(standalone.sys, "platform", "win32")
+    monkeypatch.setattr(standalone.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(standalone.sys, "_MEIPASS", str(tmp_path), raising=False)
+    monkeypatch.setattr(standalone.chemotion_inventorizer, "__file__", str(package / "__init__.py"))
+    monkeypatch.delenv("TCL_LIBRARY", raising=False)
+    monkeypatch.delenv("TK_LIBRARY", raising=False)
+    report = tmp_path / "self-test.json"
+    if embedded:
+        standalone.self_test(report)
+        assert json.loads(report.read_text())["frozen"] is True
+    else:
+        with pytest.raises(RuntimeError, match="missing tk.tcl"):
+            standalone.self_test(report)
 
 
 def test_self_test_failure_is_logged_without_windowed_exception_dialog(tmp_path, monkeypatch):

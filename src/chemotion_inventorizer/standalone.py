@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import sys
 import traceback
+import zipfile
 
 import chemotion_inventorizer
 
@@ -14,6 +15,18 @@ import chemotion_inventorizer
 def launch_app():
     from chemotion_inventorizer.__main__ import main
     main()
+
+
+def embedded_tk_library(bundle):
+    """Recognize Tk 9 script archives appended to Windows DLLs."""
+    for library in bundle.glob("*tk*.dll"):
+        try:
+            with zipfile.ZipFile(library) as archive:
+                if any(name == "tk.tcl" or name.endswith("/tk.tcl") for name in archive.namelist()):
+                    return True
+        except (OSError, zipfile.BadZipFile):
+            continue
+    return False
 
 
 def self_test(report_path):
@@ -34,8 +47,17 @@ def self_test(report_path):
         raise RuntimeError("The bundled structure renderer did not produce a PNG.")
     if getattr(sys, "frozen", False):
         for variable, filename in (("TCL_LIBRARY", "init.tcl"), ("TK_LIBRARY", "tk.tcl")):
-            if not (Path(os.environ.get(variable, "")) / filename).is_file():
-                raise RuntimeError(f"The bundle is missing {filename}.")
+            library = os.environ.get(variable, "")
+            if variable == "TCL_LIBRARY" and not library:
+                library = interpreter.eval("info library")
+            # Tcl's file command also recognizes Tcl 9's embedded zip filesystem.
+            if library and int(interpreter.call("file", "isfile", f"{library}/{filename}")):
+                continue
+            if (variable == "TK_LIBRARY" and sys.platform == "win32"
+                    and interpreter.eval("info library").startswith("//zipfs:/")
+                    and embedded_tk_library(Path(sys._MEIPASS))):
+                continue
+            raise RuntimeError(f"The bundle is missing {filename}.")
         if not (Path(chemotion_inventorizer.__file__).resolve().parent / "assets" / "icon.png").is_file():
             raise RuntimeError("The bundle is missing the application icon.")
     ChemotionClient()
