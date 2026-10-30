@@ -186,6 +186,33 @@ class InventoryTreeview(ttk.Treeview):
         if self.partial_frame is not None and self.partial_refresh is None:
             self.partial_refresh = self.after_idle(self.draw_partial_row)
 
+    def partial_row(self):
+        if not self.pixel_scrolling or not self.partial_frame.winfo_ismapped():
+            return None
+        children = self.get_children()
+        position = round(self.yview()[0] * len(children) * self.row_pixels)
+        index, offset = divmod(position, self.row_pixels)
+        if offset and index < len(children):
+            return children[index]
+        return None
+
+    def identify_row(self, y):
+        row = self.partial_row()
+        if row is not None:
+            top = self.partial_frame.winfo_y()
+            if top <= int(y) < top + self.partial_frame.winfo_height():
+                return row
+        return super().identify_row(y)
+
+    def bbox(self, item, column=None):
+        if item == self.partial_row():
+            box = self.partial_tree.bbox("partial", column)
+            if box:
+                x, _, width, _ = box
+                return (x + self.partial_frame.winfo_x(), self.partial_frame.winfo_y(),
+                        width, self.partial_frame.winfo_height())
+        return super().bbox(item, column)
+
     def draw_partial_row(self):
         self.partial_refresh = None
         children = self.get_children()
@@ -224,7 +251,9 @@ class InventoryTreeview(ttk.Treeview):
         self.partial_frame.place(x=0, y=top, width=self.winfo_width(), height=self.row_pixels - offset)
         overlay.place(x=0, y=-offset, width=self.winfo_width(), height=self.row_pixels + 4)
         overlay.xview_moveto(self.xview()[0])
-        self.partial_frame.lift()
+        # Selection redraws run after the click has created its editor. Keep
+        # the row overlay below editors even when those redraws run later.
+        self.partial_frame.lower()
 
     def set_row_height(self, height):
         if self.pixel_scrolling:
@@ -1645,6 +1674,7 @@ class Inventorizer(tk.Tk):
             return
         x, y, width, height = box
         editor.place(x=x, y=y, width=width, height=height)
+        editor.lift()
     def selected_edit_rows(self, fallback):
         selected_ids = self.selected_row_ids or set(self.tree.selection())
         rows = [candidate for candidate in self.filtered_rows() if str(candidate["id"]) in selected_ids]
