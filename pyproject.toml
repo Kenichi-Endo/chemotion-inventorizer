@@ -7,11 +7,15 @@ name = "chemotion-inventorizer"
 version = "0.1.6"
 description = "View, bulk-edit, and print Chemotion sample inventories."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.14,<3.15"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Kenichi Endo" }]
-dependencies = ["resvg-py>=0.5,<0.6"]
+dependencies = [
+  "resvg-py>=0.5,<0.6",
+  "chemotion-api==312.0.2",
+  "python-magic-bin==0.4.14; sys_platform == 'win32'",
+]
 scripts = { inventorizer = "chemotion_inventorizer.__main__:main" }
 classifiers = [
   "Development Status :: 3 - Alpha",

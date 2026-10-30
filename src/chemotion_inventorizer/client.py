@@ -1,20 +1,18 @@
 """Chemotion API access and inventory retrieval."""
 import json
 import re
-import socket
-import ssl
 import tempfile
 import threading
 import time
 import io
 import zipfile
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
-from http.cookiejar import CookieJar
 from pathlib import Path
-from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.parse import urlsplit
-from urllib.request import HTTPCookieProcessor, HTTPSHandler, Request, build_opener
+from chemotion_api import Instance
+from chemotion_api.connection import Connection, request_error
+from requests.exceptions import RequestException
 from .inventory import (
     as_dict,
     chemical_cas,
@@ -57,51 +55,69 @@ def normalized_chemotion_url(value):
     return server
 
 
-class ChemotionClient:
-    """Authenticated client for the Chemotion REST API."""
-    def __init__(self):
-        # The framework Python used by the macOS launcher may not inherit the
-        # system trust store.  Windows' Python normally does, so use its
-        # platform default when the macOS certificate bundle is unavailable.
-        certificate_bundle = "/etc/ssl/cert.pem"
-        context = (ssl.create_default_context(cafile=certificate_bundle)
-                   if Path(certificate_bundle).is_file()
-                   else ssl.create_default_context())
-        self.opener = build_opener(HTTPCookieProcessor(CookieJar()), HTTPSHandler(context=context))
-    def request(self, path, data=None, headers=None, method=None):
-        target = path if urlsplit(path).scheme in {"http", "https"} else CHEMOTION_URL + path
-        request = Request(target, data=data,
-                          headers=headers or {"Accept": "application/json"}, method=method)
+class InventoryConnection(Connection):
+    """chemotionapi transport with bounded reads and no automatic write retries."""
+
+    def _send_request(self, method, url_path, default_header, kwargs):
+        # chemotionapi normally treats all paths as relative. Downloads and
+        # thumbnails can supply absolute URLs; never send credentials off-site.
+        target = urlsplit(url_path)
+        if target.scheme or target.netloc:
+            origin = urlsplit(self.host_url)
+            if (target.scheme, target.netloc) != (origin.scheme, origin.netloc):
+                raise ConnectionError("Chemotion returned a URL outside the configured server.")
+            kwargs["url"] = url_path
+        kwargs.setdefault("timeout", REQUEST_TIMEOUT_SECONDS)
+        kwargs["headers"] = {**self.get_default_session_header(),
+                             **kwargs.get("headers", default_header)}
         last_error = None
         for attempt in range(TRANSIENT_REQUEST_ATTEMPTS):
             try:
-                with self.opener.open(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
-                    return response.read()
-            except HTTPError as error:
-                # Retrying writes could cause a duplicate or unexpected edit if
-                # Chemotion applied the request before returning its error.
-                is_safe_read = request.get_method() in {"GET", "HEAD"}
-                if (error.code in TRANSIENT_SERVER_ERROR_CODES and is_safe_read
+                response = super()._send_request(method, url_path, default_header, dict(kwargs))
+                if response.status_code < 400:
+                    return response
+                error = request_error(response)
+                response.close()
+                if (response.status_code in TRANSIENT_SERVER_ERROR_CODES
+                        and method.lower() in {"get", "head"}
                         and attempt + 1 < TRANSIENT_REQUEST_ATTEMPTS):
                     last_error = error
                     time.sleep(attempt + 1)
                     continue
-                body = error.read().decode("utf-8", "replace")[:250]
                 retries = (f" after {TRANSIENT_REQUEST_ATTEMPTS} attempts"
                            if last_error is not None else "")
-                raise ConnectionError(f"Chemotion returned {error.code}{retries}: {body}") from error
-            except (URLError, TimeoutError, socket.timeout, ssl.SSLError) as error:
+                raise ConnectionError(f"Chemotion returned {response.status_code}{retries}: {error.snippet[:250]}") from error
+            except (RequestException, ConnectionError) as error:
+                if getattr(error.__cause__, "status_code", None) is not None:
+                    raise
                 last_error = error
+                if method.lower() not in {"get", "head"}:
+                    raise ConnectionError("Could not reach Chemotion; the write was not retried.") from error
                 if attempt + 1 < TRANSIENT_REQUEST_ATTEMPTS:
                     time.sleep(attempt + 1)
-        reason = getattr(last_error, "reason", last_error)
-        raise ConnectionError(f"Could not reach Chemotion after {TRANSIENT_REQUEST_ATTEMPTS} attempts: {reason}") from last_error
+        raise ConnectionError(f"Could not reach Chemotion after {TRANSIENT_REQUEST_ATTEMPTS} attempts: {last_error}") from last_error
+
+
+class ChemotionClient:
+    """Inventory operations over a chemotionapi authenticated connection."""
+    def __init__(self):
+        self.connection = InventoryConnection(CHEMOTION_URL)
+        self.instance = Instance(self.connection)
+
+    def request(self, path, data=None, headers=None, method=None):
+        # Retain the byte-oriented inventory interface. chemotionapi serializes
+        # non-string JSON data itself, so decode our already serialized bodies.
+        if isinstance(data, bytes):
+            data = data.decode("utf-8")
+        verb = (method or ("POST" if data is not None else "GET")).lower()
+        if verb not in {"get", "post", "put", "patch", "delete"}:
+            raise ValueError(f"Unsupported Chemotion request method: {verb}")
+        with getattr(self.connection, verb)(path, data=data,
+                                            headers=headers or {"Accept": "application/json"}) as response:
+            return response.content
+
     def login(self):
-        page = self.request("/users/sign_in", headers={"Accept": "text/html"}).decode("utf-8", "replace")
-        token = re.search(r'name="csrf-token" content="([^"]+)"', page)
-        if not token: raise ConnectionError("Chemotion did not provide a login security token.")
-        body = urlencode({"user[login]": CHEMOTION_USERNAME, "user[password]": CHEMOTION_PASSWORD, "user[remember_me]": "0"}).encode()
-        self.request("/users/sign_in", body, {"Accept": "text/html", "Content-Type": "application/x-www-form-urlencoded", "X-CSRF-Token": token.group(1)})
+        self.instance.login(CHEMOTION_USERNAME, CHEMOTION_PASSWORD)
     def export_collection(self, collection, destination, timeout=900, queued=None):
         """Wait for a new export notification and save its ZIP atomically."""
         def messages():
@@ -116,7 +132,7 @@ class ChemotionClient:
                          headers, method="POST")
         except ConnectionError as error:
             # Chemotion 2.x/3.x uses the plural route and different parameters.
-            if not isinstance(error.__cause__, HTTPError) or error.__cause__.code != 404:
+            if getattr(error.__cause__, "status_code", None) != 404:
                 raise
             self.request("/api/v1/collections/exports",
                          json.dumps({"collections": [collection["id"]], "format": "zip", "nested": False}).encode(),
@@ -223,8 +239,8 @@ class ChemotionClient:
             page += 1
         # The compact list intentionally omits physical location and amount fields.
         # Fetching each sample serially is very slow, so use a small, bounded pool.
-        # Each worker owns its authenticated client because urllib cookie jars are not
-        # designed to be shared between threads.
+        # Each worker owns its authenticated chemotionapi session; mutable
+        # sessions must not be shared between threads.
         if not samples: return []
         samples.sort(key=lambda sample: natural_sort_value(shown(sample.get("short_label"))), reverse=True)
         positions = {sample["id"]: position for position, sample in enumerate(samples)}

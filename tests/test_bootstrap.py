@@ -123,3 +123,55 @@ def test_macos_wrapper_accepts_current_source_layout():
                             capture_output=True, text=True)
 
     assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("platform_name, available", [("win32", False), ("darwin", True)])
+def test_libmagic_setup_skips_install_when_not_needed(monkeypatch, platform_name, available):
+    calls = []
+    monkeypatch.setattr(bootstrap.sys, "platform", platform_name)
+
+    def run(command, **kwargs):
+        calls.append(command)
+        return SimpleNamespace(returncode=0 if available else 1)
+
+    monkeypatch.setattr(bootstrap.subprocess, "run", run)
+    bootstrap.ensure_libmagic(Path("python"), StringIO())
+    assert len(calls) == (1 if platform_name == "darwin" else 0)
+    assert not any("install" in command for command in calls)
+
+
+def test_missing_libmagic_is_installed_and_verified(monkeypatch):
+    calls = []
+    monkeypatch.setattr(bootstrap.sys, "platform", "darwin")
+    monkeypatch.setattr(bootstrap.shutil, "which", lambda name: "/test/brew")
+
+    def run(command, **kwargs):
+        calls.append(command)
+        return SimpleNamespace(returncode=1 if len(calls) == 1 else 0)
+
+    monkeypatch.setattr(bootstrap.subprocess, "run", run)
+    bootstrap.ensure_libmagic(Path("python"), StringIO())
+    assert calls == [["python", "-c", "import magic"],
+                     ["/test/brew", "install", "libmagic"],
+                     ["python", "-c", "import magic"]]
+
+
+def test_missing_homebrew_explains_setup_requirement(monkeypatch):
+    monkeypatch.setattr(bootstrap.sys, "platform", "darwin")
+    monkeypatch.setattr(bootstrap.shutil, "which", lambda name: None)
+    monkeypatch.setattr(bootstrap.Path, "is_file", lambda path: False)
+    monkeypatch.setattr(bootstrap.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(returncode=1))
+    with pytest.raises(RuntimeError, match="Install Homebrew"):
+        bootstrap.ensure_libmagic(Path("python"), StringIO())
+
+
+def test_failed_libmagic_install_does_not_mark_environment_ready(tmp_path, monkeypatch):
+    root, state, commands = fake_setup(tmp_path, monkeypatch)
+
+    def fail(*args):
+        raise subprocess.CalledProcessError(1, ["brew", "install", "libmagic"])
+
+    monkeypatch.setattr(bootstrap, "ensure_libmagic", fail)
+    with pytest.raises(subprocess.CalledProcessError):
+        bootstrap.prepare_environment(root, state, StringIO())
+    assert not (bootstrap.environment_directory(root, state) / ".chemotion-project-sha256").exists()

@@ -41,11 +41,19 @@ def build():
         "--distpath", str(bundle_output), "--workpath", str(work / "work"),
         "--specpath", str(work), "--paths", str(ROOT / "src"),
         "--collect-all", "resvg_py",
+        "--copy-metadata", "chemotion-api",
         "--add-data", f"{icon_dir / 'icon.png'}:chemotion_inventorizer/assets",
         "--add-data", f"{ROOT / 'LICENSE'}:.",
     ]
     if sys.platform == "darwin":
+        # chemotionapi imports python-magic at startup. Ship its native library
+        # so the standalone app does not require a Homebrew installation.
+        import magic
+        magic_library = magic.libmagic._name
+        if not Path(magic_library).is_file():
+            raise RuntimeError("Install libmagic with 'brew install libmagic' before building.")
         command.extend([
+            "--add-binary", f"{magic_library}:.",
             "--icon", str(RESOURCES / "ChemotionInventorizer.icns"),
             "--osx-bundle-identifier", "io.github.kenichi-endo.chemotion-inventorizer",
             "--target-arch", platform.machine(),

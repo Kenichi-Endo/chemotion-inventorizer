@@ -3,7 +3,8 @@ from chemotion_inventorizer import client as api_client
 import io
 import json
 import zipfile
-from urllib.error import HTTPError
+from chemotion_api.connection import request_error
+from requests import Response
 
 import pytest
 
@@ -69,7 +70,10 @@ def test_legacy_export_route_only_on_not_found(tmp_path, status):
         if "messages/list" in path:
             return b'{"messages": []}'
         if path.endswith("/export"):
-            raise ConnectionError("Export failed") from HTTPError(path, status, "Error", {}, None)
+            response = Response()
+            response.status_code = status
+            response._content = b"Export failed"
+            raise ConnectionError("Export failed") from request_error(response)
         assert path.endswith("/exports")
         assert json.loads(data) == {"collections": [7], "format": "zip", "nested": False}
         assert method == "POST"

@@ -1,6 +1,7 @@
 """Entry point and non-graphical dependency check for standalone bundles."""
 
 import json
+from importlib.metadata import version
 import os
 from pathlib import Path
 import sys
@@ -35,6 +36,7 @@ def self_test(report_path):
         "tcl": interpreter.eval("info patchlevel"),
         "renderer": "ok",
         "https_client": "ok",
+        "chemotion_api": version("chemotion-api"),
     }, indent=2) + "\n", encoding="utf-8")
 
 

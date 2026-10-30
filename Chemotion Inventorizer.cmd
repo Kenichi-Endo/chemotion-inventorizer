@@ -14,7 +14,7 @@ rem Keep the console available during automatic first-time setup. The bootstrap
 rem starts the installed environment's pythonw.exe once setup has completed.
 where py >nul 2>nul
 if not errorlevel 1 (
-    py -3 "%BOOTSTRAP%" %*
+    py -3.14 "%BOOTSTRAP%" %*
     if errorlevel 1 goto :launch_failed
     exit /b 0
 )
@@ -26,7 +26,7 @@ if not errorlevel 1 (
     exit /b 0
 )
 
-echo Python 3.10 or newer with Tk support was not found.
+echo Python 3.14 with Tk support was not found.
 echo Install Python from https://www.python.org/downloads/windows/
 echo Select "Add python.exe to PATH" and keep "tcl/tk and IDLE" selected.
 

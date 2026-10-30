@@ -5,7 +5,7 @@ from io import BytesIO
 import json
 from pathlib import Path
 import re
-from urllib.error import HTTPError
+from requests import Response
 
 import pytest
 
@@ -165,18 +165,20 @@ def test_chemotion_server_url_requires_an_http_root(server):
 
 
 def test_safe_read_retries_temporary_server_errors(monkeypatch):
+    monkeypatch.setattr(api_client, "CHEMOTION_URL", "https://eln.example.org")
     client = api_client.ChemotionClient()
     calls = 0
 
-    def open_request(request, timeout):
+    def send(request, **kwargs):
         nonlocal calls
         calls += 1
-        if calls < 3:
-            raise HTTPError(request.full_url, 500, "Internal Server Error", None,
-                            BytesIO(b'{"status":500}'))
-        return _Response(b'{"samples": []}')
+        response = Response()
+        response.request = request
+        response.status_code = 500 if calls < 3 else 200
+        response._content = b'{"status":500}' if calls < 3 else b'{"samples": []}'
+        return response
 
-    monkeypatch.setattr(client.opener, "open", open_request)
+    monkeypatch.setattr(client.connection, "send", send)
     monkeypatch.setattr(api_client.time, "sleep", lambda seconds: None)
 
     assert client.request("/api/v1/samples") == b'{"samples": []}'
@@ -184,16 +186,20 @@ def test_safe_read_retries_temporary_server_errors(monkeypatch):
 
 
 def test_write_does_not_retry_temporary_server_errors(monkeypatch):
+    monkeypatch.setattr(api_client, "CHEMOTION_URL", "https://eln.example.org")
     client = api_client.ChemotionClient()
     calls = 0
 
-    def open_request(request, timeout):
+    def send(request, **kwargs):
         nonlocal calls
         calls += 1
-        raise HTTPError(request.full_url, 500, "Internal Server Error", None,
-                        BytesIO(b'{"status":500}'))
+        response = Response()
+        response.request = request
+        response.status_code = 500
+        response._content = b'{"status":500}'
+        return response
 
-    monkeypatch.setattr(client.opener, "open", open_request)
+    monkeypatch.setattr(client.connection, "send", send)
 
     with pytest.raises(ConnectionError, match="Chemotion returned 500"):
         client.request("/api/v1/samples/1", b"{}", method="PUT")

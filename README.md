@@ -1,6 +1,6 @@
 # Chemotion Inventorizer
 
-Chemotion Inventorizer is a desktop app for viewing, bulk-editing, and printing Chemotion sample information.
+Chemotion Inventorizer is a desktop app based on [Chemotion API](https://github.com/Chemotion/chemotionapi) for viewing, bulk-editing, and printing [Chemotion ELN](https://chemotion.net/) sample information.
 
 ![Chemotion Inventorizer with anonymized locations and connection details](docs/images/inventory-anonymized.png)
 
@@ -24,7 +24,7 @@ Chemotion Inventorizer is a desktop app for viewing, bulk-editing, and printing 
 ## Setup
 
 - **Standalone app:** Ready to use without installing Python.
-- **Customizable launcher:** Runs the editable Python source and requires Python 3.10+. Choose this option to customize the app.
+- **Customizable launcher:** Runs the editable Python source and requires Python 3.14. Choose this option to customize the app.
 
 ### Standalone app
 
@@ -35,7 +35,7 @@ Chemotion Inventorizer is a desktop app for viewing, bulk-editing, and printing 
 
 ### Customizable launcher
 
-1. Install Python 3.10+, if not installed: [Python for macOS](https://www.python.org/downloads/macos/) or [Python for Windows](https://www.python.org/downloads/windows/). On Windows, select **Add python.exe to PATH** and keep **tcl/tk and IDLE** selected during installation.
+1. Install Python 3.14, if not installed: [Python for macOS](https://www.python.org/downloads/macos/) or [Python for Windows](https://www.python.org/downloads/windows/). On Windows, select **Add python.exe to PATH** and keep **tcl/tk and IDLE** selected during installation.
 2. Download **Source code (zip)** from [Releases](https://github.com/Kenichi-Endo/chemotion-inventorizer/releases) and extract it, or clone the repository. Keep the project folder intact when moving or sharing the app.
 3. Open `Chemotion Inventorizer.app` on macOS or double-click `Chemotion Inventorizer.cmd` on Windows. Keep an internet connection available during automatic dependency installation. The first launch may take a few minutes.
 

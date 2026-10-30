@@ -19,16 +19,14 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
 # Finder supplies only a minimal PATH. Prefer the Python.org framework install,
 # which is also where this project's supported Python is installed.
-if [ -x /Library/Frameworks/Python.framework/Versions/Current/bin/python3 ]; then
-    python=/Library/Frameworks/Python.framework/Versions/Current/bin/python3
-elif [ -x /usr/local/bin/python3 ]; then
-    python=/usr/local/bin/python3
+if [ -x /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 ]; then
+    python=/Library/Frameworks/Python.framework/Versions/3.14/bin/python3
 else
-    python=$(command -v python3 2>/dev/null || true)
+    python=$(command -v python3.14 2>/dev/null || true)
 fi
 
 if [ -z "$python" ]; then
-    printf '%s\n' 'Python 3 was not found. Install Python 3.10 or newer to run Chemotion Inventorizer.' >&2
+    printf '%s\n' 'Python 3.14 was not found. Install Python 3.14 to run Chemotion Inventorizer.' >&2
     exit 1
 fi
 
