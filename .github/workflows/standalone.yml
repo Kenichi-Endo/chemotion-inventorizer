@@ -38,6 +38,8 @@ jobs:
       - if: runner.os == 'macOS'
         run: brew install libmagic
       - run: python -m pip install -e ".[dev,standalone]"
+      - if: runner.os == 'Windows'
+        run: python -c "import sys; from chemotion_inventorizer.bootstrap import ensure_libmagic; ensure_libmagic(sys.executable, sys.stdout)"
       - run: >-
           python -u -c "import faulthandler, pytest;
           faulthandler.dump_traceback_later(60, exit=True);

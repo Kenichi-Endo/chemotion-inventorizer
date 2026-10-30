@@ -31,7 +31,26 @@ def environment_directory(project_root, state_root):
 
 
 def ensure_libmagic(python, log):
-    """Install macOS libmagic when python-magic cannot load it."""
+    """Repair the platform's native libmagic dependency when needed."""
+    if sys.platform == "win32":
+        command = [str(python), "-c",
+                   "import magic; assert magic.__version__ == '0.4.14'; "
+                   "assert magic.from_buffer(b'test\\n', mime=True) == 'text/plain'"]
+        try:
+            if subprocess.run(command, stdout=log, stderr=subprocess.STDOUT,
+                              timeout=15).returncode == 0:
+                return
+        except subprocess.TimeoutExpired:
+            pass
+        # chemotion-api installs python-magic over python-magic-bin's shared
+        # module. Restore the Windows binding, which uses its bundled DLL/database.
+        log.write("Repairing the Windows libmagic binding…\n")
+        log.flush()
+        subprocess.run([str(python), "-m", "pip", "install", "--disable-pip-version-check",
+                        "--force-reinstall", "--no-deps", "python-magic-bin==0.4.14"],
+                       stdout=log, stderr=subprocess.STDOUT, check=True)
+        subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=15)
+        return
     if sys.platform != "darwin":
         return
     command = [str(python), "-c", "import magic"]

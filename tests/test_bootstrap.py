@@ -125,7 +125,8 @@ def test_macos_wrapper_accepts_current_source_layout():
     assert result.returncode == 0, result.stderr
 
 
-@pytest.mark.parametrize("platform_name, available", [("win32", False), ("darwin", True)])
+@pytest.mark.parametrize("platform_name, available", [("win32", True), ("darwin", True),
+                                                      ("linux", True)])
 def test_libmagic_setup_skips_install_when_not_needed(monkeypatch, platform_name, available):
     calls = []
     monkeypatch.setattr(bootstrap.sys, "platform", platform_name)
@@ -136,8 +137,33 @@ def test_libmagic_setup_skips_install_when_not_needed(monkeypatch, platform_name
 
     monkeypatch.setattr(bootstrap.subprocess, "run", run)
     bootstrap.ensure_libmagic(Path("python"), StringIO())
-    assert len(calls) == (1 if platform_name == "darwin" else 0)
+    assert len(calls) == (0 if platform_name == "linux" else 1)
     assert not any("install" in command for command in calls)
+
+
+@pytest.mark.parametrize("hung", [False, True])
+def test_windows_libmagic_repairs_conflicting_binding_before_runtime_check(monkeypatch, hung):
+    monkeypatch.setattr(bootstrap.sys, "platform", "win32")
+    calls = []
+
+    def run(command, **kwargs):
+        calls.append((command, kwargs))
+        if len(calls) == 1:
+            assert kwargs["timeout"] == 15
+            if hung:
+                raise subprocess.TimeoutExpired(command, 15)
+            return SimpleNamespace(returncode=1)
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(bootstrap.subprocess, "run", run)
+    bootstrap.ensure_libmagic(Path("python.exe"), StringIO())
+
+    assert len(calls) == 3
+    assert calls[1][0][-3:] == ["--force-reinstall", "--no-deps", "python-magic-bin==0.4.14"]
+    assert calls[1][1]["check"] is True
+    assert calls[2][0] == calls[0][0]
+    assert calls[2][1]["check"] is True
+    assert calls[2][1]["timeout"] == 15
 
 
 def test_missing_libmagic_is_installed_and_verified(monkeypatch):
