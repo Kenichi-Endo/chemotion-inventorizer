@@ -91,8 +91,14 @@ def build():
         environment = os.environ.copy()
         environment.pop("PYTHONPATH", None)
         environment.pop("PYTHONHOME", None)
-        subprocess.run([str(checked_executable), "--self-test", str(report)],
-                       cwd=directory, env=environment, check=True, timeout=60)
+        try:
+            subprocess.run([str(checked_executable), "--self-test", str(report)],
+                           cwd=directory, env=environment, check=True, timeout=60)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            diagnostic = report.with_suffix(".log")
+            if diagnostic.is_file():
+                print(diagnostic.read_text(encoding="utf-8"), flush=True)
+            raise
         result = json.loads(report.read_text(encoding="utf-8"))
         if result.get("frozen") is not True:
             raise RuntimeError("Dependency check did not run in a frozen application.")

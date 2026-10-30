@@ -1,8 +1,24 @@
 """Exercise standalone diagnostics without opening a window or using a server."""
 
 import json
+import pytest
 
 from chemotion_inventorizer import standalone
+
+
+def test_self_test_failure_is_logged_without_windowed_exception_dialog(tmp_path, monkeypatch):
+    report = tmp_path / "self-test.json"
+    monkeypatch.setattr(standalone.sys, "argv", ["inventorizer", "--self-test", str(report)])
+
+    def fail(report_path):
+        raise ImportError("missing bundled dependency")
+
+    monkeypatch.setattr(standalone, "self_test", fail)
+    with pytest.raises(SystemExit) as error:
+        standalone.main()
+    assert error.value.code == 1
+    assert "ImportError: missing bundled dependency" in report.with_suffix(".log").read_text()
+    assert not report.exists()
 
 
 def test_self_test_cli_checks_dependencies_without_launching_gui(tmp_path, monkeypatch):
