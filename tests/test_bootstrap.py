@@ -69,14 +69,16 @@ def test_failed_install_does_not_mark_environment_as_ready(tmp_path, monkeypatch
     assert not marker.exists()
 
 
-def test_missing_renderer_in_existing_environment_is_repaired(tmp_path, monkeypatch):
+@pytest.mark.parametrize("platform_name", ["darwin", "win32"])
+def test_missing_renderer_in_existing_environment_is_repaired(tmp_path, monkeypatch, platform_name):
+    monkeypatch.setattr(bootstrap.sys, "platform", platform_name)
     root, state, commands = fake_setup(tmp_path, monkeypatch)
     bootstrap.prepare_environment(root, state, StringIO())
     commands.clear()
     successful_run = bootstrap.subprocess.run
 
     def run(command, **kwargs):
-        if "-c" in command and not kwargs.get("check"):
+        if command[-1] == bootstrap.RUNTIME_CHECK and not kwargs.get("check"):
             return SimpleNamespace(returncode=1)
         return successful_run(command, **kwargs)
 
