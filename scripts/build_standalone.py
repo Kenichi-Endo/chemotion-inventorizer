@@ -1,7 +1,6 @@
 """Build and check the current platform's standalone application without a GUI."""
 
 import argparse
-from importlib.metadata import version
 import json
 import os
 from pathlib import Path
@@ -11,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 import zipfile
 
 
@@ -30,7 +30,8 @@ def build():
     bundle_output = output / platform_name
     work = ROOT / "build" / "standalone" / platform_name
     work.mkdir(parents=True, exist_ok=True)
-    app_version = version("chemotion-inventorizer")
+    with (ROOT / "pyproject.toml").open("rb") as stream:
+        app_version = tomllib.load(stream)["project"]["version"]
     icon_dir = work / "assets"
     icon_dir.mkdir(exist_ok=True)
     shutil.copy2(RESOURCES / "chemotion-inventorizer-icon.png", icon_dir / "icon.png")
