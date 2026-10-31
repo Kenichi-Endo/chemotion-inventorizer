@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chemotion-inventorizer"
-version = "0.1.7"
+version = "0.1.8"
 description = "View, bulk-edit, and print Chemotion sample inventories."
 readme = "README.md"
 requires-python = ">=3.14,<3.15"
