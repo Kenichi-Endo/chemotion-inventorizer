@@ -959,7 +959,9 @@ class Inventorizer(tk.Tk):
         else:
             messagebox.showinfo("Collection export", f"Download completed.\n\n{destination}")
 
-    def load_selected_collection(self, _event=None): self.refresh()
+    def load_selected_collection(self, _event=None):
+        self.refresh()
+        self.after_idle(self.tree.focus_set)
     def refresh(self):
         if self.collection_value.get() not in self.collection_choices:
             self.status.configure(text="Choose a collection before retrieving inventory.", fg=self.colors["error"])
