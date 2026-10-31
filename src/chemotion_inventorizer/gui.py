@@ -918,7 +918,7 @@ class Inventorizer(tk.Tk):
             self.status.configure(text="Opening the last used collection…", fg=self.colors["accent"])
             self.after_idle(self.refresh)
         else:
-            self.status.configure(text="Choose a collection to retrieve its inventory.", fg=self.colors["muted"])
+            self.status.configure(text="Choose a collection to retrieve its samples.", fg=self.colors["muted"])
     def _collections_failed(self, error):
         self.set_controls_busy(False); self.status.configure(text="Chemotion collections could not be retrieved.",fg=self.colors["error"]); messagebox.showerror(APP_NAME, error)
     def export_collection(self):
@@ -964,7 +964,7 @@ class Inventorizer(tk.Tk):
         self.after_idle(self.tree.focus_set)
     def refresh(self):
         if self.collection_value.get() not in self.collection_choices:
-            self.status.configure(text="Choose a collection before retrieving inventory.", fg=self.colors["error"])
+            self.status.configure(text="Choose a collection before retrieving samples.", fg=self.colors["error"])
             return
         collection = self.collection_choices[self.collection_value.get()]
         self.profile_settings["last_collection"] = {"id": collection["id"], "synchronized": bool(collection.get("_synchronized"))}
@@ -972,13 +972,13 @@ class Inventorizer(tk.Tk):
         self.rows = []; self.structure_rows_pending.clear(); self.selected_row_ids.clear(); self.location_filter_retained_row_ids.clear(); self.render_rows()
         self.sort_key = "label"; self.sort_reverse = True; self.update_sort_headings()
         cancelled = threading.Event(); self.inventory_cancel_event = cancelled; self.inventory_loading = True
-        self.set_controls_busy(True); self.show_progress(); self.status.configure(text="Retrieving the current inventory from Chemotion… (Esc to stop)",fg=self.colors["accent"]); threading.Thread(target=self._retrieve, args=(collection, cancelled, self.column_visibility["structure"].get()), daemon=True).start()
+        self.set_controls_busy(True); self.show_progress(); self.status.configure(text="Retrieving the selected Chemotion collection… (Esc to stop)",fg=self.colors["accent"]); threading.Thread(target=self._retrieve, args=(collection, cancelled, self.column_visibility["structure"].get()), daemon=True).start()
     def cancel_inventory_load(self, _event=None):
         if not self.inventory_loading or not self.inventory_cancel_event or self.inventory_cancel_event.is_set():
             return
         self.inventory_cancel_event.set()
         self.cancel_load_button.configure(state="disabled")
-        self.status.configure(text="Stopping inventory loading…", fg=self.colors["muted"])
+        self.status.configure(text="Stopping collection loading…", fg=self.colors["muted"])
         return "break"
     def _retrieve(self, collection, cancelled, with_structures=False):
         try:
@@ -1053,7 +1053,7 @@ class Inventorizer(tk.Tk):
     def _failed(self,error, cancelled=None):
         if cancelled is not None and (cancelled.is_set() or cancelled is not self.inventory_cancel_event): return
         self.inventory_loading = False
-        self.hide_progress(); self.status.configure(text="The Chemotion inventory could not be retrieved.",fg=self.colors["error"]); self.set_controls_busy(False); messagebox.showerror(APP_NAME,error)
+        self.hide_progress(); self.status.configure(text="The selected Chemotion collection could not be retrieved.",fg=self.colors["error"]); self.set_controls_busy(False); messagebox.showerror(APP_NAME,error)
     def set_controls_busy(self, busy):
         collection = self.collection_choices.get(self.collection_value.get())
         self.export_button.configure(state="normal" if not busy and self.logged_in and collection and not collection.get("_synchronized") else "disabled")
