@@ -13,6 +13,33 @@ from requests.exceptions import Timeout
 from chemotion_inventorizer import client as api_client
 
 
+@pytest.fixture(autouse=True)
+def isolated_authentication(monkeypatch):
+    monkeypatch.setattr(api_client, "_authentication_key", None)
+    monkeypatch.setattr(api_client, "_authentication_token", None)
+
+
+def test_clients_reuse_token_until_connection_details_change(monkeypatch):
+    calls = []
+
+    def login(instance, username, password):
+        calls.append((username, password))
+        instance._con.set_bearer_token(f"token-{len(calls)}")
+
+    monkeypatch.setattr(api_client.Instance, "login", login)
+    first = api_client.ChemotionClient()
+    first.login()
+    second = api_client.ChemotionClient()
+    second.login()
+    assert first.connection is not second.connection
+    assert second.connection.bearer_token == first.connection.bearer_token
+    assert len(calls) == 1
+    monkeypatch.setattr(api_client, "CHEMOTION_USERNAME", "another-user")
+    second.login()
+    assert len(calls) == 2
+    assert second.connection.bearer_token == "token-2"
+
+
 @pytest.fixture
 def client(monkeypatch):
     monkeypatch.setattr(api_client, "CHEMOTION_URL", "https://eln.example.org")

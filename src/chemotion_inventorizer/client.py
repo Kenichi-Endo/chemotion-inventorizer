@@ -28,6 +28,9 @@ DEFAULT_CHEMOTION_URL = "https://"
 CHEMOTION_URL = DEFAULT_CHEMOTION_URL
 CHEMOTION_USERNAME = ""
 CHEMOTION_PASSWORD = ""
+_authentication_lock = threading.RLock()
+_authentication_key = None
+_authentication_token = None
 
 # Keep concurrent inventory reads small enough to avoid TLS connection bursts.
 MAX_CONCURRENT_SAMPLE_REQUESTS = 8
@@ -60,6 +63,7 @@ class InventoryConnection(Connection):
     """chemotionapi transport with bounded reads and no automatic write retries."""
 
     def _send_request(self, method, url_path, default_header, kwargs):
+        global _authentication_token
         # chemotionapi normally treats all paths as relative. Downloads and
         # thumbnails can supply absolute URLs; never send credentials off-site.
         target = urlsplit(url_path)
@@ -88,6 +92,10 @@ class InventoryConnection(Connection):
                     return response
                 error = request_error(response)
                 response.close()
+                if response.status_code == 401 and self.bearer_token is not None:
+                    with _authentication_lock:
+                        if self.bearer_token == _authentication_token:
+                            _authentication_token = None
                 if (response.status_code in TRANSIENT_SERVER_ERROR_CODES
                         and method.lower() in {"get", "head"}
                         and attempt + 1 < TRANSIENT_REQUEST_ATTEMPTS):
@@ -128,7 +136,19 @@ class ChemotionClient:
             return response.content
 
     def login(self):
-        self.instance.login(CHEMOTION_USERNAME, CHEMOTION_PASSWORD)
+        global _authentication_key, _authentication_token
+        # Share only the token; each worker retains its own requests session.
+        key = (CHEMOTION_URL, CHEMOTION_USERNAME, CHEMOTION_PASSWORD)
+        with _authentication_lock:
+            if key != _authentication_key:
+                _authentication_key = None
+                _authentication_token = None
+            if _authentication_token is None:
+                self.instance.login(CHEMOTION_USERNAME, CHEMOTION_PASSWORD)
+                _authentication_key = key
+                _authentication_token = self.connection.bearer_token
+            else:
+                self.connection.set_bearer_token(_authentication_token)
     def export_collection(self, collection, destination, timeout=900, queued=None):
         """Wait for a new export notification and save its ZIP atomically."""
         def messages():
@@ -216,7 +236,7 @@ class ChemotionClient:
                 raise InventoryLoadCancelled()
 
         check_cancelled()
-        if progress: progress("Signing in to Chemotion…")
+        if progress: progress("Retrieving the selected Chemotion collection…")
         self.login(); check_cancelled(); samples = []
         # ElementSet handles pagination and synchronized collection queries;
         # retain raw listing records without triggering serial detail loads.
