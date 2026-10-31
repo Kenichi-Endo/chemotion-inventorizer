@@ -38,7 +38,7 @@ def test_windows_archive_contains_only_executable_and_checks_it_in_isolation(tmp
 
     monkeypatch.setattr(builder, "ROOT", tmp_path)
     monkeypatch.setattr(builder, "RESOURCES", resources)
-    monkeypatch.setattr(builder, "version", lambda name: "0.1.1")
+    (tmp_path / "pyproject.toml").write_text('[project]\nversion = "0.1.1"\n')
     monkeypatch.setattr(builder.sys, "platform", "win32")
     monkeypatch.setattr(builder.platform, "machine", lambda: "AMD64")
     monkeypatch.setattr(builder.subprocess, "run", run)
