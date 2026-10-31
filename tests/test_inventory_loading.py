@@ -7,16 +7,37 @@ import threading
 from types import SimpleNamespace
 
 import pytest
+from requests import Response
 
 from chemotion_inventorizer import gui as app
 
 
+def mock_sample_list(monkeypatch, numbers):
+    monkeypatch.setattr(api_client, "CHEMOTION_URL", "https://eln.example.org")
+    def send(self, request, **kwargs):
+        response = Response()
+        response.status_code = 200
+        if request.url.endswith("/about"):
+            response._content = b"Version: 3.1.2"
+            return response
+        if request.url.endswith("/api/v1/segments/klasses.json"):
+            response._content = b'{"klass": []}'
+            return response
+        assert request.url.endswith("/api/v1/samples.json")
+        response._content = json.dumps({
+            "samples": [{"id": number, "type": "sample", "molecule": {}, "short_label": f"S{number}"}
+                        for number in numbers],
+        }).encode()
+        response.headers["X-Total"] = str(len(numbers))
+        response.headers["X-Total-Pages"] = "1"
+        return response
+
+    monkeypatch.setattr(api_client.InventoryConnection, "send", send)
+
+
 def prepare_client(monkeypatch):
     monkeypatch.setattr(api_client.ChemotionClient, "login", lambda self: None)
-    monkeypatch.setattr(api_client.ChemotionClient, "request", lambda self, path: json.dumps({
-        "samples": [{"id": number, "short_label": f"S{number}"} for number in (2, 10, 1)],
-        "samples_count": 3,
-    }).encode())
+    mock_sample_list(monkeypatch, (2, 10, 1))
     monkeypatch.setattr(api_client.ChemotionClient, "inventory_entry",
                         lambda self, sample_id, *args: {"id": sample_id})
     monkeypatch.setattr(api_client, "MAX_CONCURRENT_SAMPLE_REQUESTS", 1)
@@ -274,10 +295,7 @@ def test_sequential_inventory_waits_for_thumbnail_acknowledgement(monkeypatch):
 def test_eight_samples_wait_for_structures_before_more_samples_start(monkeypatch):
     client = prepare_client(monkeypatch)
     monkeypatch.setattr(api_client, "MAX_CONCURRENT_SAMPLE_REQUESTS", 8)
-    monkeypatch.setattr(api_client.ChemotionClient, "request", lambda self, path: json.dumps({
-        "samples": [{"id": number, "short_label": f"S{number}"} for number in range(12)],
-        "samples_count": 12,
-    }).encode())
+    mock_sample_list(monkeypatch, range(12))
     ready = threading.Event()
     displayed = threading.Event()
     lock = threading.Lock()

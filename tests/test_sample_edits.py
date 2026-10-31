@@ -135,17 +135,15 @@ def test_density_commit_rejects_invalid_values(value):
     assert messages
 
 
-def test_density_request_preserves_flags():
-    import json
-
-    requests = []
-    client = SimpleNamespace(request=lambda *args, **kwargs: requests.append((args, kwargs)))
-    api_client.ChemotionClient.set_density(client, 7, "1.25", {"id": 3}, True, False)
-    args, kwargs = requests[0]
-    assert args[0] == "/api/v1/samples/7"
-    assert json.loads(args[1]) == {"density": "1.25", "container": {"id": 3},
-                                   "decoupled": True, "inventory_sample": False}
-    assert kwargs == {"method": "PUT"}
+def test_density_edit_loads_current_sample_before_saving():
+    saved = []
+    sample = SimpleNamespace(properties={"decoupled": False, "inventory_sample": True}, json_data={},
+                             save=lambda: saved.append(True))
+    client = api_client.ChemotionClient()
+    client.instance.get_sample = lambda sample_id: sample
+    client.set_density(7, "1.25", {"id": 3}, True, False)
+    assert sample.properties == {"density": "1.25", "decoupled": False, "inventory_sample": True}
+    assert saved == [True]
 
 
 @pytest.mark.parametrize("fail_first", [False, True])

@@ -12,6 +12,7 @@ from urllib.parse import urlencode
 from urllib.parse import urlsplit
 from chemotion_api import Instance
 from chemotion_api.connection import Connection, request_error
+from chemotion_api.elements import ElementSet
 from requests.exceptions import RequestException
 from .inventory import (
     as_dict,
@@ -75,6 +76,15 @@ class InventoryConnection(Connection):
             try:
                 response = super()._send_request(method, url_path, default_header, dict(kwargs))
                 if response.status_code < 400:
+                    # Older servers provide the total in JSON instead of the
+                    # pagination headers consumed by chemotionapi's ElementSet.
+                    if (method.lower() == "get" and target.path == "/api/v1/samples.json"
+                            and ("X-Total" not in response.headers or "X-Total-Pages" not in response.headers)):
+                        total = response.json().get("samples_count")
+                        if total is not None:
+                            per_page = int((kwargs.get("data") or {}).get("per_page", 100))
+                            response.headers.setdefault("X-Total", str(total))
+                            response.headers.setdefault("X-Total-Pages", str(max(1, (int(total) + per_page - 1) // per_page)))
                     return response
                 error = request_error(response)
                 response.close()
@@ -105,6 +115,7 @@ class ChemotionClient:
         self.instance = Instance(self.connection)
 
     def request(self, path, data=None, headers=None, method=None):
+        """Send exports, chemical metadata, images, and compatibility requests."""
         # Retain the byte-oriented inventory interface. chemotionapi serializes
         # non-string JSON data itself, so decode our already serialized bodies.
         if isinstance(data, bytes):
@@ -175,33 +186,11 @@ class ChemotionClient:
         raise TimeoutError("The export is still pending. Check Chemotion notifications for its download link.")
 
     def collections(self):
-        """Return normal (editable) collection records available to this account."""
-        records = []
-        try:
-            # Chemotion ELN 3.x combines own and remotely available
-            # collections under this single endpoint.
-            payload = json.loads(self.request("/api/v1/collections").decode("utf-8"))
-            if "own" in payload or "shared_with_me" in payload:
-                records.extend((item, False) for item in (payload.get("own") or []))
-                records.extend((item, True) for item in (payload.get("shared_with_me") or []))
-            else:
-                raise ConnectionError("Chemotion returned an unrecognized collection list.")
-        except ConnectionError as modern_error:
-            # Older Chemotion versions expose the collection trees separately
-            # and may reject this newer GET route with either 404 or 405.
-            # Authentication and other server failures should still surface.
-            if not any(code in str(modern_error) for code in ("404", "405")):
-                raise
-            for path in ("/api/v1/collections/locked.json", "/api/v1/collections/roots.json", "/api/v1/collections/shared_roots.json"):
-                payload = json.loads(self.request(path).decode("utf-8"))
-                records.extend((item, False) for item in (payload.get("collections") or []))
-        # Synchronized collections use a different sample query and browser
-        # route. They may be unavailable for some accounts, so do not let a
-        # permissions error hide normal collections.
-        try:
-            payload = json.loads(self.request("/api/v1/syncCollections/sync_remote_roots.json").decode("utf-8"))
-            records.extend((item, True) for item in (payload.get("syncCollections") or payload.get("sync_collections") or []))
-        except ConnectionError: pass
+        """Return selectable records from chemotionapi's own and shared trees."""
+        root = self.instance.get_root_collection()
+        records = [(root.all, False)]
+        records.extend((collection.to_json(), False) for collection in root.children)
+        records.extend((collection.to_json(), True) for collection in root.sync_root.children)
         found = {}
         def add(collection, synchronized=False, source_collection_id=None):
             if not isinstance(collection, dict) or collection.get("id") is None: return
@@ -228,15 +217,20 @@ class ChemotionClient:
 
         check_cancelled()
         if progress: progress("Signing in to Chemotion…")
-        self.login(); check_cancelled(); samples = []; page = 1; total = None
+        self.login(); check_cancelled(); samples = []
+        # ElementSet handles pagination and synchronized collection queries;
+        # retain raw listing records without triggering serial detail loads.
+        elements = ElementSet(self.connection, {"name": "sample", "is_generic": False},
+                              collection_id, collection_is_sync=synchronized)
+        elements.load_elements(per_page=100)
         while True:
             check_cancelled()
-            parameter = "sync_collection_id" if synchronized else "collection_id"
-            result = json.loads(self.request(f"/api/v1/samples?{parameter}={collection_id}&per_page=100&page={page}").decode("utf-8")); batch = result.get("samples") or []; samples += batch
-            total = int(result.get("samples_count", 0))
-            if progress: progress(f"Retrieving the list of {total} samples…")
-            if len(samples) >= total or not batch: break
-            page += 1
+            batch = [sample.json_data for sample in list.__iter__(elements)]
+            samples.extend(batch)
+            if progress: progress(f"Retrieving the list of {len(elements)} samples…")
+            if elements.page >= elements.max_page or not batch: break
+            check_cancelled()
+            elements.next_page()
         # The compact list intentionally omits physical location and amount fields.
         # Fetching each sample serially is very slow, so use a small, bounded pool.
         # Each worker owns its authenticated chemotionapi session; mutable
@@ -298,7 +292,7 @@ class ChemotionClient:
         return rows
     def inventory_entry(self, sample_id, collection_id=None, synchronized=False, fallback_sample=None):
         """Retrieve the complete, current display record for one sample."""
-        detail = json.loads(self.request(f"/api/v1/samples/{sample_id}").decode("utf-8")).get("sample", fallback_sample or {})
+        detail = self.instance.get_sample(sample_id).json_data
         chemical = json.loads(self.request(f"/api/v1/chemicals?sample_id={sample_id}").decode("utf-8"))
         row = inventory_row(detail, inventory_vendor(chemical), collection_id, synchronized)
         row["chemical_data"] = as_dict(chemical).get("chemical_data") or []
@@ -307,62 +301,45 @@ class ChemotionClient:
         return row
     def set_location(self, sample_id, location, container, decoupled, inventory_sample):
         """Set one location while preserving flags defaulted by Chemotion's API."""
-        body = json.dumps({"location": location, "container": container,
-                           "decoupled": decoupled, "inventory_sample": inventory_sample}).encode("utf-8")
-        self.request(f"/api/v1/samples/{sample_id}", body,
-                     {"Accept": "application/json", "Content-Type": "application/json"}, method="PUT")
+        self._save_sample(sample_id, {"location": location})
     def set_amount(self, sample_id, field, value, unit, container, decoupled, inventory_sample):
         """Update one amount while preserving the sample's other editable flags."""
-        body = json.dumps({f"{field}_value": str(value), f"{field}_unit": unit, "container": container,
-                           "decoupled": decoupled, "inventory_sample": inventory_sample}).encode("utf-8")
-        self.request(f"/api/v1/samples/{sample_id}", body,
-                     {"Accept": "application/json", "Content-Type": "application/json"}, method="PUT")
+        self._save_sample(sample_id, {field: {"value": str(value), "unit": unit}})
     def set_density(self, sample_id, density, container, decoupled, inventory_sample):
         """Update density while retaining the current container and sample flags."""
-        body = json.dumps({"density": density, "container": container,
-                           "decoupled": decoupled, "inventory_sample": inventory_sample}).encode("utf-8")
-        self.request(f"/api/v1/samples/{sample_id}", body,
-                     {"Accept": "application/json", "Content-Type": "application/json"}, method="PUT")
+        self._save_sample(sample_id, {"density": density})
     def set_sample_flags(self, sample_id, container, decoupled, inventory_sample):
         """Update the two sample flags together, retaining the current container."""
-        body = json.dumps({"container": container, "decoupled": decoupled,
-                           "inventory_sample": inventory_sample}).encode("utf-8")
-        self.request(f"/api/v1/samples/{sample_id}", body,
-                     {"Accept": "application/json", "Content-Type": "application/json"}, method="PUT")
+        self._save_sample(sample_id, {"decoupled": decoupled, "inventory_sample": inventory_sample})
+
+    def _save_sample(self, sample_id, properties, molecule_name_id=None):
+        # Fetch current data before saving: GUI rows may be stale and save()
+        # serializes the complete sample, including its container and flags.
+        sample = self.instance.get_sample(sample_id)
+        for key, value in properties.items():
+            sample.properties[key] = value
+        if molecule_name_id is not None:
+            sample.json_data["molecule_name_id"] = molecule_name_id
+        # chemotionapi normally copies the molecule molfile into the sample.
+        # Inventory edits must retain the sample's own structure, even if null.
+        if "molfile" in sample.json_data:
+            sample.molecule["molfile"] = sample.json_data["molfile"]
+        sample.save()
     def remove_sample_from_collection(self, collection_id, sample_id, synchronized=False, source_collection_id=None):
         """Remove one sample's membership in a collection without deleting it."""
-        if synchronized:
-            # Chemotion 2.x handles a synchronized collection through its sync
-            # link ID.  Its UI sends this legacy endpoint and flag, which let
-            # the server resolve the original collection with the recipient's
-            # permissions.
-            payload = {
-                "ui_state": {
-                    "currentCollection": {"id": collection_id, "is_sync_to_me": True},
-                    "sample": {"checkedAll": False, "checkedIds": [sample_id], "uncheckedIds": []},
-                },
-            }
-            response = self.request(
-                "/api/v1/collections/elements/", json.dumps(payload).encode("utf-8"),
-                {"Accept": "application/json", "Content-Type": "application/json"}, method="DELETE")
-            return json.loads(response.decode("utf-8")) if response else {}
-        payload = {
-            "collection_id": collection_id,
-            "ui_state": {
-                "currentCollection": {"id": collection_id},
-                "sample": {"checkedAll": False, "checkedIds": [sample_id], "uncheckedIds": []},
-            },
-        }
-        response = self.request(
-            f"/api/v1/collection_elements/{collection_id}", json.dumps(payload).encode("utf-8"),
-            {"Accept": "application/json", "Content-Type": "application/json"}, method="DELETE")
-        return json.loads(response.decode("utf-8")) if response else {}
+        root = self.instance.get_root_collection(reload=False)
+        tree = root.sync_root if synchronized else root
+        matches = tree.find(id=collection_id)
+        if not matches:
+            raise ConnectionError("The collection is no longer available. Reload the collection list.")
+        # A listing record identifies an existing sample without fetching it.
+        elements = ElementSet(self.connection, {"name": "sample", "is_generic": False})
+        sample = elements.new_element({"id": sample_id, "type": "sample", "molecule": {}})
+        matches[0].remove_elements(sample)
+        return {}
     def set_sample_name(self, sample_id, name, container, decoupled, inventory_sample):
         """Update a sample name without letting API defaults reset its flags."""
-        body = json.dumps({"name": name, "container": container, "decoupled": decoupled,
-                           "inventory_sample": inventory_sample}).encode("utf-8")
-        self.request(f"/api/v1/samples/{sample_id}", body,
-                     {"Accept": "application/json", "Content-Type": "application/json"}, method="PUT")
+        self._save_sample(sample_id, {"name": name})
     def create_molecule_name(self, molecule_id, name):
         """Create a molecule-name option and return Chemotion's identifier for it."""
         query = urlencode({"id": molecule_id, "new_name": name})
@@ -372,10 +349,7 @@ class ChemotionClient:
         return match["value"]
     def set_molecule_name(self, sample_id, molecule_name_id, container, decoupled, inventory_sample):
         """Select a molecule name for one sample while preserving its flags."""
-        body = json.dumps({"molecule_name_id": molecule_name_id, "container": container,
-                           "decoupled": decoupled, "inventory_sample": inventory_sample}).encode("utf-8")
-        self.request(f"/api/v1/samples/{sample_id}", body,
-                     {"Accept": "application/json", "Content-Type": "application/json"}, method="PUT")
+        self._save_sample(sample_id, {}, molecule_name_id=molecule_name_id)
     def set_vendor(self, sample_id, chemical_data, vendor, chemical_id=None, cas=""):
         """Set a vendor, creating Chemotion's chemical record when it is absent."""
         data = json.loads(json.dumps(chemical_data)) if chemical_data else [{}]

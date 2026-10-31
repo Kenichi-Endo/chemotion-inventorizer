@@ -4,8 +4,10 @@ from chemotion_inventorizer import client as api_client, inventory, settings
 from io import BytesIO
 import json
 from pathlib import Path
+from types import SimpleNamespace
 import re
 from requests import Response
+from chemotion_api.collection import Collection
 
 import pytest
 
@@ -426,20 +428,12 @@ def test_synchronized_collection_picker_uses_legacy_chemotion_initials_for_the_u
 
 def test_collection_picker_omits_nested_collection_containers():
     client = api_client.ChemotionClient()
-
-    def request(path, data=None, headers=None, method=None):
-        if path == "/api/v1/collections":
-            return json.dumps({"own": [], "shared_with_me": [{
-                "id": 1,
-                "label": "with AK-KE",
-                "sharer": {"initials": "ZAR"},
-                "children": [{"id": 2, "label": "Inventory"}],
-            }]}).encode()
-        if path == "/api/v1/syncCollections/sync_remote_roots.json":
-            return b'{}'
-        raise AssertionError(f"Unexpected request: {path}")
-
-    client.request = request
+    shared = Collection({
+        "id": 1, "label": "with AK-KE", "sharer": {"initials": "ZAR"},
+        "children": [{"id": 2, "label": "Inventory"}],
+    })
+    client.instance.get_root_collection = lambda: SimpleNamespace(
+        all={}, children=[], sync_root=SimpleNamespace(children=[shared]))
 
     assert [(item["id"], item["label"]) for item in client.collections()] == [(2, "Inventory")]
 
@@ -461,8 +455,12 @@ def test_collection_picker_sorts_synchronized_collections_by_source_code_then_na
     assert [item["id"] for item in collections] == [4, 2, 3, 1]
 
 
-def test_removing_from_a_synchronized_collection_uses_the_legacy_sync_delete_endpoint():
+@pytest.mark.parametrize("synchronized", [False, True])
+def test_removing_from_a_missing_collection_reports_error_without_writing(synchronized):
     client = api_client.ChemotionClient()
+    root = SimpleNamespace(find=lambda **kwargs: [])
+    root.sync_root = root
+    client.instance.get_root_collection = lambda **kwargs: root
     calls = []
 
     def request(path, data=None, headers=None, method=None):
@@ -470,14 +468,9 @@ def test_removing_from_a_synchronized_collection_uses_the_legacy_sync_delete_end
         return b""
 
     client.request = request
-    client.remove_sample_from_collection(999, 42, synchronized=True)
-
-    assert calls == [("/api/v1/collections/elements/", "DELETE", {
-        "ui_state": {
-            "currentCollection": {"id": 999, "is_sync_to_me": True},
-            "sample": {"checkedAll": False, "checkedIds": [42], "uncheckedIds": []},
-        },
-    })]
+    with pytest.raises(ConnectionError, match="no longer available"):
+        client.remove_sample_from_collection(999, 42, synchronized=synchronized)
+    assert calls == []
 
 
 def test_vendor_for_a_new_chemical_record_uses_chemotion_create_endpoint():
@@ -502,19 +495,3 @@ def test_vendor_for_an_existing_chemical_record_uses_update_endpoint():
     assert calls == [("/api/v1/chemicals", {
         "sample_id": 173, "chemical_data": [{"order_number": "ABC-1", "vendor": "Merck"}]
     }, "PUT")]
-
-
-def test_removing_a_sample_only_deletes_its_collection_membership():
-    client = api_client.ChemotionClient()
-    calls = []
-    client.request = lambda path, data=None, headers=None, method=None: calls.append((path, json.loads(data), headers, method)) or b""
-
-    client.remove_sample_from_collection(42, 173)
-
-    assert calls == [("/api/v1/collection_elements/42", {
-        "collection_id": 42,
-        "ui_state": {
-            "currentCollection": {"id": 42},
-            "sample": {"checkedAll": False, "checkedIds": [173], "uncheckedIds": []},
-        },
-    }, {"Accept": "application/json", "Content-Type": "application/json"}, "DELETE")]

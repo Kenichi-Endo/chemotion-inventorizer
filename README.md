@@ -76,6 +76,7 @@ If macOS says **“Chemotion Inventorizer.app” cannot be opened**:
 Edit the Python files in `src/chemotion_inventorizer/` manually or with a coding agent, then restart the customizable launcher.
 
 ## Data handling
+Most communication with Chemotion uses the built-in functions of [chemotionapi](https://github.com/Chemotion/chemotionapi) version **312.0.2**: sign-in (`Instance.login()`), loading collections (`Instance.get_root_collection()`, which also calls `RootCollection.load_sync_collection()`), sample listing (`ElementSet.load_elements()` and `ElementSet.next_page()`), sample details (`Instance.get_sample()`), sample edits (`Sample.save()`), and removing samples from collections (`Collection.remove_elements()`). Vendor metadata, creating molecule names, structure images, and collection exports use custom requests through the same authenticated connection (`Connection.get()`, `Connection.post()`, and `Connection.put()`).
 
 Sample information is retrieved over HTTPS and held in memory while the app is open.
 
