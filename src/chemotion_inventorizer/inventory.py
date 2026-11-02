@@ -267,6 +267,10 @@ def inventory_row(sample, vendor=None, collection_id=None, synchronized=False):
     formula = molecule.get("sum_formular") or molecule.get("molecular_formula")
     first_molecule_name = next((candidate for candidate in names if candidate), None)
     name = sample.get("showed_name") or sample.get("name") or sample.get("external_label") or molecule.get("iupac_name") or first_molecule_name or formula or "—"
+    if sample.get("sample_type") == "Mixture":
+        name = "; ".join(component["name"] for component in sample.get("components") or []
+                         if isinstance(component, dict) and component.get("name")) or "—"
+        name = f"(Mixture) {name}"
     amount = "—"; amount_field = None; amount_value = None; amount_unit = None
     for prefix in ("real_amount", "target_amount"):
         if sample.get(f"{prefix}_value") is not None:
@@ -276,7 +280,8 @@ def inventory_row(sample, vendor=None, collection_id=None, synchronized=False):
     collection_id = collection_id or editable_collection_id(sample)
     molecule_name = as_dict(sample.get("molecule_name_hash"))
     return {"id": sample.get("id"), "container": sample.get("container"), "collection_id": collection_id, "synchronized": synchronized, "label": shown(sample.get("short_label")),
-            "molecule": name, "density": shown(sample.get("density")), "sample": shown(sample.get("name")),
+            "molecule": name, "sample_type": sample.get("sample_type"),
+            "density": shown(sample.get("density")), "sample": shown(sample.get("name")),
             "molecule_id": molecule.get("id"), "molecule_name_id": molecule_name.get("value"),
             "structure": structure,
             "vendor": shown(vendor or sample.get("vendor") or sample.get("supplier")), "amount": amount,

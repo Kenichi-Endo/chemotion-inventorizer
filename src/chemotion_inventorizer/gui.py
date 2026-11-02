@@ -1620,6 +1620,7 @@ class Inventorizer(tk.Tk):
         editor.bind("<FocusOut>", lambda _event: self.finish_amount_edit(row))
         return "break"
     def edit_name(self, row, item_id, field):
+        if field == "molecule" and row.get("sample_type") == "Mixture": return "break"
         self.cancel_amount_edit()
         self.editing_rows = self.selected_edit_rows(row)
         box = self.tree.bbox(item_id, field)
@@ -1917,6 +1918,8 @@ class Inventorizer(tk.Tk):
         except Exception as error:
             self.after(0, self._name_change_failed, "density", str(error))
     def _save_molecule_name(self, rows, name):
+        rows = [row for row in rows if row.get("sample_type") != "Mixture"]
+        if not rows: return
         if any(not row.get("molecule_id") for row in rows):
             self.edit_after_save = None
             self.status.configure(text="One or more selected samples have no Chemotion molecule reference.", fg=self.colors["error"])

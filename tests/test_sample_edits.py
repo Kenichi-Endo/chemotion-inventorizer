@@ -8,6 +8,33 @@ import pytest
 from test_amount_display import app
 
 
+def test_mixture_names_use_components():
+    row = inventory.inventory_row({
+        "sample_type": "Mixture", "name": "Sample name", "showed_name": "Old name",
+        "components": [{"name": "Water"}, {"name": "Ethanol"}, {"name": ""}],
+    })
+    assert row["molecule"] == "(Mixture) Water; Ethanol"
+    assert row["sample"] == "Sample name"
+    assert row["sample_type"] == "Mixture"
+    assert inventory.inventory_row({"sample_type": "Mixture"})["molecule"] == "(Mixture) —"
+
+
+def test_mixture_molecule_cell_does_not_create_editor():
+    assert app.Inventorizer.edit_name(SimpleNamespace(), {"sample_type": "Mixture"}, "1", "molecule") == "break"
+
+
+def test_bulk_molecule_edit_excludes_mixtures():
+    calls = []
+    viewer = SimpleNamespace(_start_sample_edit=lambda *args: calls.append(args),
+                             _change_molecule_name=object())
+    regular = {"id": 1, "molecule_id": 2}
+    mixture = {"id": 3, "sample_type": "Mixture"}
+    app.Inventorizer._save_molecule_name(viewer, [regular, mixture], "New name")
+    assert calls[0][0] == [regular]
+    app.Inventorizer._save_molecule_name(viewer, [mixture], "New name")
+    assert len(calls) == 1
+
+
 def test_printing_uses_location_filtered_samples(monkeypatch):
     rows = [{"id": 1}, {"id": 2}]
     printed = []
