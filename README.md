@@ -34,7 +34,7 @@ Chemotion Inventorizer is a desktop app based on [Chemotion API](https://github.
 2. Download **Source code (zip)** from [Releases](https://github.com/Kenichi-Endo/chemotion-inventorizer/releases) and extract it, or clone the repository. Keep the project folder intact when moving or sharing the app.
 3. Open `Chemotion Inventorizer.app` on macOS or double-click `Chemotion Inventorizer.cmd` on Windows. Keep an internet connection available during automatic dependency installation. The first launch may take a few minutes.
 
-If macOS says **“Chemotion Inventorizer.app” cannot be opened**:
+If macOS says **The application “Chemotion Inventorizer.app” cannot be opened**:
 
 1. Open Terminal, type `cd ` (including the space), drag the extracted project folder into Terminal, and press Return.
 2. Run:
