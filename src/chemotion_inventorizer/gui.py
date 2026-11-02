@@ -63,6 +63,15 @@ def multi_selection_modifier(windowing_system):
     return "Command" if windowing_system == "aqua" else "Control"
 
 
+def inventory_status_text(count, collections, filter_description=""):
+    text = f"{count} samples"
+    if collections:
+        names = ", ".join(str(item.get("label") or item.get("name") or item["id"]) for item in collections)
+        text += f" from {'collection' if len(collections) == 1 else 'collections'}: {names}"
+    return text + filter_description
+
+
+
 def minimum_window_size(screen_width, screen_height):
     """Leave room for window decorations and the taskbar on small displays."""
     return min(1050, max(320, screen_width - 80)), min(620, max(240, screen_height - 160))
@@ -517,7 +526,36 @@ class Inventorizer(tk.Tk):
         self.login_controls = tk.Frame(self.controls); self.login_controls.pack(anchor="w")
         self.location_controls = tk.Frame(self.controls); self.location_controls.pack(anchor="w", pady=(6, 0))
 
-        ttk.Label(self.login_controls, text="Server:").pack(side="left", padx=(4,0)); self.server_entry = ttk.Entry(self.login_controls, textvariable=self.server_value, width=28); self.server_entry.pack(side="left", padx=4); ttk.Label(self.login_controls, text="Username:").pack(side="left", padx=(4,0)); self.username_entry = ttk.Entry(self.login_controls, textvariable=self.username_value, width=9); self.username_entry.pack(side="left", padx=4); ttk.Label(self.login_controls, text="Password:").pack(side="left"); self.password_entry = ttk.Entry(self.login_controls, textvariable=self.password_value, width=21, show="•"); self.password_entry.pack(side="left", padx=4); self.remember_checkbutton = ttk.Checkbutton(self.login_controls, text="Remember", variable=self.remember_credentials, command=self.remember_credentials_changed); self.remember_checkbutton.pack(side="left", padx=(0, 4)); self.login_button = ttk.Button(self.login_controls, text="Sign in", command=self.login); self.login_button.pack(side="left", padx=(0, 12)); self.server_entry.bind("<Return>", self.login_from_return); self.username_entry.bind("<Return>", self.login_from_return); self.password_entry.bind("<Return>", self.login_from_return); ttk.Label(self.login_controls, text="Collection:").pack(side="left", padx=(4,0)); self.collection_menu = ttk.Combobox(self.login_controls, textvariable=self.collection_value, values=(), state="disabled", width=20); self.collection_menu.pack(side="left", padx=4); self.collection_menu.bind("<<ComboboxSelected>>", self.load_selected_collection); disable_combobox_scroll_selection(self.collection_menu); self.cancel_load_button = ttk.Button(self.login_controls, text="Cancel", command=self.cancel_inventory_load, state="disabled"); self.cancel_load_button.pack(side="left", padx=(0, 4)); self.refresh_button = ttk.Button(self.login_controls, text="Refresh", command=self.refresh); self.refresh_button.pack(side="left", padx=4)
+        ttk.Label(self.login_controls, text="Server:").pack(side="left", padx=(4,0)); self.server_entry = ttk.Entry(self.login_controls, textvariable=self.server_value, width=28); self.server_entry.pack(side="left", padx=4); ttk.Label(self.login_controls, text="Username:").pack(side="left", padx=(4,0)); self.username_entry = ttk.Entry(self.login_controls, textvariable=self.username_value, width=9); self.username_entry.pack(side="left", padx=4); ttk.Label(self.login_controls, text="Password:").pack(side="left"); self.password_entry = ttk.Entry(self.login_controls, textvariable=self.password_value, width=21, show="•"); self.password_entry.pack(side="left", padx=4); self.remember_checkbutton = ttk.Checkbutton(self.login_controls, text="Remember", variable=self.remember_credentials, command=self.remember_credentials_changed); self.remember_checkbutton.pack(side="left", padx=(0, 4)); self.login_button = ttk.Button(self.login_controls, text="Sign in", command=self.login); self.login_button.pack(side="left", padx=(0, 12)); self.server_entry.bind("<Return>", self.login_from_return); self.username_entry.bind("<Return>", self.login_from_return); self.password_entry.bind("<Return>", self.login_from_return)
+        self.server_entry.configure(width=19)
+        self.username_entry.configure(width=5)
+        self.collection_controls = ttk.Frame(self.login_controls)
+        self.collection_controls.pack(side="left")
+        ttk.Label(self.collection_controls, text="Collections:").pack(side="left", padx=(4, 0))
+        collection_frame = ttk.Frame(self.collection_controls)
+        collection_frame.pack(side="left", padx=4)
+        self.collection_menu = tk.Listbox(collection_frame, selectmode="extended", exportselection=False,
+                                          height=4, width=22, state="disabled")
+        self.collection_menu.pack(side="left", fill="both", expand=True)
+        collection_scrollbar = ttk.Scrollbar(collection_frame, orient="vertical", command=self.collection_menu.yview)
+        collection_scrollbar.pack(side="right", fill="y")
+        self.collection_menu.configure(yscrollcommand=collection_scrollbar.set)
+        self.collection_menu.bind("<<ListboxSelect>>", self.load_selected_collection)
+        self.collection_selection_locked = False
+        selection_guard = f"CollectionSelectionGuard{self.collection_menu}"
+        self.collection_menu.bindtags((selection_guard, *self.collection_menu.bindtags()))
+        for sequence in ("<Button-1>", "<B1-Motion>", "<KeyPress>"):
+            self.collection_menu.bind_class(selection_guard, sequence, self.guard_collection_selection)
+        if self.tk.call("tk", "windowingsystem") == "aqua":
+            # Tk supplies Ctrl-click toggling; also use the standard Mac modifier.
+            self.collection_menu.bind("<Command-Button-1>",
+                                      self.collection_menu.bind_class("Listbox", "<Control-Button-1>") + "\nbreak")
+        self.loaded_collections = []
+        self.startup_load_pending = True
+        self.cancel_load_button = ttk.Button(self.collection_controls, text="Cancel", command=self.cancel_inventory_load, state="disabled")
+        self.cancel_load_button.pack(side="left", padx=(0, 4))
+        self.refresh_button = ttk.Button(self.collection_controls, text="Go", command=self.refresh)
+        self.refresh_button.pack(side="left", padx=4)
 
         self.columns_button = ttk.Menubutton(self.location_controls, text="Columns")
         self.columns_menu = tk.Menu(self.columns_button, tearoff=False)
@@ -553,7 +591,12 @@ class Inventorizer(tk.Tk):
         self.filter_entry.bind("<FocusOut>", self.update_filter_placeholder)
         self.filter_entry.bind("<Escape>", self.clear_text_filter)
         self.text_filter.trace_add("write", self.filter_by_text)
-        ttk.Label(self.location_controls, text="Location:").pack(side="left", padx=(12,0)); self.location_filter_menu = ttk.Combobox(self.location_controls, textvariable=self.location_filter, values=("All locations",), state="readonly", width=18); self.location_filter_menu.pack(side="left", padx=4); self.location_filter_menu.bind("<<ComboboxSelected>>", self.filter_by_location); disable_combobox_scroll_selection(self.location_filter_menu)
+        ttk.Label(self.location_controls, text="Location:").pack(side="left", padx=(12, 0))
+        self.location_filter_menu = ttk.Combobox(self.location_controls, textvariable=self.location_filter,
+                                                values=("All locations",), state="readonly", width=18)
+        self.location_filter_menu.pack(side="left", padx=4)
+        self.location_filter_menu.bind("<<ComboboxSelected>>", self.filter_by_location)
+        disable_combobox_scroll_selection(self.location_filter_menu)
         self.print_button = ttk.Button(self.location_controls, text="Print…", command=self.printable, state="disabled"); self.print_button.pack(side="left", padx=4)
         self.export_button = ttk.Button(self.location_controls, text="Export collection…", command=self.export_collection, state="disabled")
         self.export_button.pack(side="left", padx=4)
@@ -633,6 +676,8 @@ class Inventorizer(tk.Tk):
         self.dark_mode = dark; self.colors = self.appearance_colors(dark); self.colors["accent"] = accent; c = self.colors; self.configure(bg=c["base"])
         for item in (self.top, self.status_area, self.controls, self.login_controls, self.location_controls, self.progress_area): item.configure(bg=c["base"])
         self.status.configure(bg=c["base"])
+        self.collection_menu.configure(background=c["panel"], foreground=c["text"],
+                                       selectbackground=accent, selectforeground=contrasting_text_color(accent))
         self.style.configure("Inventory.Horizontal.TProgressbar", background=accent, troughcolor=c["panel"])
         row_height = self.table_row_height()
         self.style.configure("Inventory.TFrame",background=c["base"]); self.style.configure("Inventory.Treeview",background=c["panel"],fieldbackground=c["panel"],foreground=c["text"],rowheight=row_height); self.style.map("Inventory.Treeview",background=[("selected",accent)],foreground=[("selected",contrasting_text_color(accent))]); self.style.configure("Inventory.Treeview.Heading",background=c["base"],foreground=c["text"],font=self.column_header_font)
@@ -884,7 +929,9 @@ class Inventorizer(tk.Tk):
         self.profile_settings["chemotion_server"] = server
         save_profile_settings(self.profile_settings)
         self.logged_in = False; self.login_button.configure(text="Sign in")
-        self.collection_value.set("Choose collection…"); self.collection_choices = {}; self.collection_menu.configure(values=())
+        self.collection_value.set("Choose collection…"); self.collection_choices = {}
+        self.collection_menu.configure(state="normal")
+        self.collection_menu.delete(0, "end")
         self.load_collections()
     def login_from_return(self, _event=None):
         if not self.logged_in: self.login()
@@ -910,19 +957,27 @@ class Inventorizer(tk.Tk):
             shown(item.get("label")).casefold(),
         ))
         self.collection_choices = {collection_picker_label(item): item for item in collections}
-        self.collection_menu.configure(values=tuple(self.collection_choices))
+        self.collection_menu.configure(state="normal")
+        self.collection_menu.delete(0, "end")
+        for label in self.collection_choices:
+            self.collection_menu.insert("end", label)
         self.logged_in = True; self.login_button.configure(text="Signed in")
         self.set_controls_busy(False)
-        saved = self.profile_settings.get("last_collection")
-        selected_label = next((label for label, item in self.collection_choices.items()
-                               if isinstance(saved, dict) and item.get("id") == saved.get("id")
-                               and bool(item.get("_synchronized")) == bool(saved.get("synchronized"))), None)
-        if selected_label:
-            self.collection_value.set(selected_label)
-            self.status.configure(text="Opening the last used collection…", fg=self.colors["accent"])
-            self.after_idle(self.refresh)
-        else:
-            self.status.configure(text="Choose a collection to retrieve its samples.", fg=self.colors["muted"])
+        saved = self.profile_settings.get("last_collections", [self.profile_settings.get("last_collection")])
+        if not isinstance(saved, list):
+            saved = []
+        for index, item in enumerate(self.collection_choices.values()):
+            if any(isinstance(previous, dict) and item.get("id") == previous.get("id")
+                   and bool(item.get("_synchronized")) == bool(previous.get("synchronized"))
+                   for previous in saved):
+                self.collection_menu.selection_set(index)
+                self.collection_menu.see(index)
+        self.load_selected_collection()
+        self.status.configure(text="Select collections, then press Go to retrieve samples.", fg=self.colors["muted"])
+        if self.startup_load_pending:
+            self.startup_load_pending = False
+            if self.collection_menu.curselection():
+                self.after_idle(self.refresh)
     def _collections_failed(self, error):
         self.set_controls_busy(False); self.status.configure(text="Chemotion collections could not be retrieved.",fg=self.colors["error"]); messagebox.showerror(APP_NAME, error)
     def export_collection(self):
@@ -964,19 +1019,27 @@ class Inventorizer(tk.Tk):
             messagebox.showinfo("Collection export", f"Download completed.\n\n{destination}")
 
     def load_selected_collection(self, _event=None):
-        self.refresh()
-        self.after_idle(self.tree.focus_set)
+        labels = [self.collection_menu.get(index) for index in self.collection_menu.curselection()]
+        self.collection_value.set(labels[0] if len(labels) == 1 else "")
+        self.set_controls_busy(self.inventory_loading)
+
+    def selected_collections(self):
+        return [self.collection_choices[self.collection_menu.get(index)]
+                for index in self.collection_menu.curselection()]
     def refresh(self):
-        if self.collection_value.get() not in self.collection_choices:
-            self.status.configure(text="Choose a collection before retrieving samples.", fg=self.colors["error"])
+        collections = self.selected_collections()
+        if not collections:
+            self.status.configure(text="Select at least one collection before pressing Go.", fg=self.colors["error"])
             return
-        collection = self.collection_choices[self.collection_value.get()]
-        self.profile_settings["last_collection"] = {"id": collection["id"], "synchronized": bool(collection.get("_synchronized"))}
+        self.profile_settings["last_collections"] = [
+            {"id": collection["id"], "synchronized": bool(collection.get("_synchronized"))}
+            for collection in collections]
         save_profile_settings(self.profile_settings)
+        self.loaded_collections = [dict(collection) for collection in collections]
         self.rows = []; self.structure_rows_pending.clear(); self.selected_row_ids.clear(); self.location_filter_retained_row_ids.clear(); self.render_rows()
         self.sort_key = "label"; self.sort_reverse = True; self.update_sort_headings()
         cancelled = threading.Event(); self.inventory_cancel_event = cancelled; self.inventory_loading = True
-        self.set_controls_busy(True); self.show_progress(); self.status.configure(text="Retrieving the selected Chemotion collection… (Esc to stop)",fg=self.colors["accent"]); threading.Thread(target=self._retrieve, args=(collection, cancelled, self.column_visibility["structure"].get()), daemon=True).start()
+        self.set_controls_busy(True); self.show_progress(); self.status.configure(text="Retrieving the selected Chemotion collections… (Esc to stop)",fg=self.colors["accent"]); threading.Thread(target=self._retrieve, args=(collections, cancelled, self.column_visibility["structure"].get()), daemon=True).start()
     def cancel_inventory_load(self, _event=None):
         if not self.inventory_loading or not self.inventory_cancel_event or self.inventory_cancel_event.is_set():
             return
@@ -985,6 +1048,8 @@ class Inventorizer(tk.Tk):
         self.status.configure(text="Stopping collection loading…", fg=self.colors["muted"])
         return "break"
     def _retrieve(self, collection, cancelled, with_structures=False):
+        collections = [collection] if isinstance(collection, dict) else collection
+        collection = collections[0]
         try:
             def deliver_rows(rows):
                 if not with_structures:
@@ -1000,7 +1065,7 @@ class Inventorizer(tk.Tk):
             rows = ChemotionClient().inventory(collection["id"], collection.get("_synchronized", False),
                                                 lambda message: self.after(0, self._progress, message, cancelled), cancelled,
                                                 rows_loaded=None if with_structures else deliver_rows,
-                                                row_ready=deliver_rows if with_structures else None)
+                                                row_ready=deliver_rows if with_structures else None, collections=collections)
             self.after(0, self._loaded, rows, cancelled)
         except InventoryLoadCancelled as stopped:
             self.after(0, self._cancelled, cancelled, stopped.rows)
@@ -1042,7 +1107,7 @@ class Inventorizer(tk.Tk):
     def _loaded(self, rows, cancelled=None):
         if cancelled is not None and cancelled is not self.inventory_cancel_event: return
         self.inventory_loading = False
-        self.rows=rows; self.location_filter_retained_row_ids.clear(); self.update_location_filter(); self.render_rows(); self.hide_progress(); self.status.configure(text=f"{len(self.filtered_rows())} samples",fg=self.colors["muted"]); self.set_controls_busy(False); self.print_button.configure(state="normal" if rows else "disabled")
+        self.rows=rows; self.location_filter_retained_row_ids.clear(); self.update_location_filter(); self.render_rows(); self.hide_progress(); self.status.configure(text=inventory_status_text(len(self.filtered_rows()), self.loaded_collections),fg=self.colors["muted"]); self.set_controls_busy(False); self.print_button.configure(state="normal" if rows else "disabled")
         if self.column_visibility["structure"].get():
             self.load_structure_images(self.filtered_rows())
     def _cancelled(self, cancelled, rows=None):
@@ -1068,8 +1133,13 @@ class Inventorizer(tk.Tk):
         self.username_entry.configure(state="disabled" if busy else "normal")
         self.password_entry.configure(state="disabled" if busy else "normal")
         self.remember_checkbutton.configure(state="disabled" if busy else "normal")
-        self.collection_menu.configure(state="disabled" if busy else ("readonly" if self.collection_choices else "disabled"))
+        self.collection_selection_locked = busy
+        self.collection_menu.configure(state="normal" if self.collection_choices else "disabled")
         self.location_filter_menu.configure(state="disabled" if busy else "readonly")
+    def guard_collection_selection(self, event):
+        if self.collection_selection_locked and event.keysym not in {"Tab", "ISO_Left_Tab", "Escape"}:
+            return "break"
+
     def update_sort_headings(self):
         for heading, key in zip(self.headings, self.keys):
             arrow = " ▼" if self.sort_reverse else " ▲"
@@ -1086,7 +1156,7 @@ class Inventorizer(tk.Tk):
         widget = event.widget
         if widget.winfo_toplevel() != self:
             return
-        if widget.winfo_class() in ("Entry", "TEntry", "Spinbox", "TSpinbox", "Text", "TCombobox"):
+        if widget.winfo_class() in ("Entry", "TEntry", "Spinbox", "TSpinbox", "Text", "TCombobox", "Listbox"):
             self.typing_prefix = ""
             return
         # Leave Control/Command shortcuts and navigation keys to Tk.
@@ -1128,7 +1198,7 @@ class Inventorizer(tk.Tk):
         self.render_rows(); count = len(self.filtered_rows())
         if self.column_visibility["structure"].get() and not self.inventory_loading:
             self.load_structure_images(self.filtered_rows())
-        self.status.configure(text=f"{count} samples", fg=self.colors["muted"])
+        self.status.configure(text=inventory_status_text(count, getattr(self, "loaded_collections", [])), fg=self.colors["muted"])
     def update_filter_placeholder(self, _event=None):
         placeholder = not self.text_filter.get() and self.focus_get() != self.filter_entry
         self.updating_filter_display = True
@@ -1362,7 +1432,7 @@ class Inventorizer(tk.Tk):
         self.selected_row_ids = set(self.tree.selection())
         return "break"
     def delete_selected_row(self, _event=None):
-        """Confirm removal of the focused selected row from this collection."""
+        """Confirm removal of the focused selected row from all loaded collections."""
         selected_ids = set(self.tree.selection())
         item_id = self.tree.focus()
         if item_id not in selected_ids:
@@ -1370,46 +1440,58 @@ class Inventorizer(tk.Tk):
         row = next((item for item in self.rows if str(item["id"]) == item_id), None)
         if not row:
             return "break"
-        collection = self.collection_choices.get(self.collection_value.get())
-        if not collection:
-            self.status.configure(text="Choose a collection before removing a sample.", fg=self.colors["error"])
+        collections = [dict(collection) for collection in self.loaded_collections]
+        if not collections:
+            self.status.configure(text="Load collections before removing a sample.", fg=self.colors["error"])
             return "break"
         sample = row["sample"] or f"sample {row['label']}"
         short_label = row["label"] or sample
         if not messagebox.askyesno(
-                "Remove from collection?",
-                f"Remove {sample} from the selected collection?\n\nIt will remain in Chemotion and any other collections.",
+                "Remove from loaded collections?",
+                f"Remove {sample} from all {len(collections)} loaded collections?\n\nIt will remain in Chemotion and any other collections.",
                 parent=self):
             return "break"
         self.cancel_amount_edit()
         self.set_controls_busy(True); self.print_button.configure(state="disabled"); self.show_progress()
-        self.status.configure(text=f"Removing {short_label} from the collection…", fg=self.colors["accent"])
+        self.status.configure(text=f"Removing {short_label} from all loaded collections…", fg=self.colors["accent"])
         threading.Thread(target=self._remove_sample_from_collection,
-                         args=(row, collection["id"], bool(collection.get("_synchronized")),
-                               collection.get("_source_collection_id")), daemon=True).start()
+                         args=(row, collections), daemon=True).start()
         return "break"
-    def _remove_sample_from_collection(self, row, collection_id, synchronized=False, source_collection_id=None):
+    def _remove_sample_from_collection(self, row, collections):
         try:
             client = ChemotionClient(); client.login()
-            result = client.remove_sample_from_collection(collection_id, row["id"], synchronized, source_collection_id)
-            self.after(0, self._sample_removed_from_collection, row, result.get("locked_sample_ids") or [])
+            locked_sample_ids = []
+            failures = []
+            for collection in collections:
+                try:
+                    result = client.remove_sample_from_collection(
+                        collection["id"], row["id"], bool(collection.get("_synchronized")),
+                        collection.get("_source_collection_id"))
+                    locked_sample_ids.extend(result.get("locked_sample_ids") or [])
+                except Exception as error:
+                    failures.append(f"{collection.get('label') or collection['id']}: {error}")
+            if failures:
+                self.after(0, self._sample_removal_failed,
+                           "The sample may have been removed from some loaded collections.\n\n" + "\n".join(failures))
+            else:
+                self.after(0, self._sample_removed_from_collection, row, locked_sample_ids)
         except Exception as error:
             self.after(0, self._sample_removal_failed, str(error))
     def _sample_removed_from_collection(self, row, locked_sample_ids):
         if row["id"] in locked_sample_ids or str(row["id"]) in {str(item) for item in locked_sample_ids}:
             self.hide_progress(); self.set_controls_busy(False)
             self.print_button.configure(state="normal" if self.rows else "disabled")
-            self.status.configure(text=f"{row['label']} remains in this collection because it is linked to another item.", fg=self.colors["error"])
+            self.status.configure(text=f"{row['label']} remains in at least one loaded collection because it is linked to another item.", fg=self.colors["error"])
             return
         self.rows = [item for item in self.rows if item is not row]
         self.selected_row_ids.clear(); self.update_location_filter(); self.render_rows(preserve_display_order=True)
         self.hide_progress(); self.set_controls_busy(False)
         self.print_button.configure(state="normal" if self.rows else "disabled")
-        self.status.configure(text=f"Removed {row['label']} from the selected collection.", fg=self.colors["muted"])
+        self.status.configure(text=f"Removed {row['label']} from all loaded collections.", fg=self.colors["muted"])
     def _sample_removal_failed(self, error):
         self.hide_progress(); self.set_controls_busy(False)
         self.print_button.configure(state="normal" if self.rows else "disabled")
-        self.status.configure(text="The sample could not be removed from the collection.", fg=self.colors["error"])
+        self.status.configure(text="The sample could not be removed from all loaded collections.", fg=self.colors["error"])
         messagebox.showerror(APP_NAME, error)
     def extend_edit_selection(self, event):
         """Extend row selection without opening an editor on a modifier-click."""

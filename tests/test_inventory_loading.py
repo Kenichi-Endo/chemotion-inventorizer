@@ -452,3 +452,44 @@ def test_row_appears_with_its_thumbnail_without_changing_retrieval_status(monkey
     assert not displayed.is_set()
     idle_callbacks[0]()
     assert displayed.is_set()
+
+
+def test_combined_inventory_lists_all_pages_before_details_with_one_progress(monkeypatch):
+    client = prepare_client(monkeypatch)
+    listed, requested, messages = [], [], []
+    pages = {42: ((2, 10), (1,)), 43: ((2, 20),)}
+
+    class Elements(list):
+        def __init__(self, connection, klass, collection_id, collection_is_sync):
+            self.collection_id = collection_id
+            self.page = 1
+            self.max_page = len(pages[collection_id])
+            assert collection_is_sync == (collection_id == 43)
+
+        def load_elements(self, per_page=100):
+            self.clear()
+            self.extend(SimpleNamespace(json_data={"id": number, "short_label": f"S{number}"})
+                        for number in pages[self.collection_id][self.page - 1])
+            listed.append((self.collection_id, self.page))
+
+        def next_page(self):
+            self.page += 1
+            self.load_elements()
+
+    all_pages = [(42, 1), (42, 2), (43, 1)]
+
+    def entry(self, sample_id, collection_id, synchronized, fallback):
+        assert listed == all_pages
+        requested.append((sample_id, collection_id, synchronized))
+        return {"id": sample_id}
+
+    monkeypatch.setattr(api_client, "ElementSet", Elements)
+    monkeypatch.setattr(api_client.ChemotionClient, "inventory_entry", entry)
+    rows = client.inventory(42, collections=[{"id": 42}, {"id": 43, "_synchronized": True}],
+                            progress=messages.append)
+    expected = [20, 10, 2, 1]
+    assert [row["id"] for row in rows] == expected
+    assert requested == [(number, 43 if number == 20 else 42, number == 20) for number in expected]
+    assert [row["_inventory_position"] for row in rows] == list(range(len(expected)))
+    assert [message for message in messages if message.startswith("Retrieving sample information:")] == [
+        f"Retrieving sample information: {index} of {len(expected)}…" for index in range(1, len(expected) + 1)]

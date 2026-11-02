@@ -229,7 +229,7 @@ class ChemotionClient:
         # only leaves, while preserving every nested selectable collection.
         leaves = (item for item in found.values() if not item.get("children"))
         return sorted(leaves, key=lambda item: str(item.get("label") or "").casefold())
-    def inventory(self, collection_id, synchronized=False, progress=None, cancelled=None, rows_loaded=None, sequential=False, row_ready=None):
+    def inventory(self, collection_id, synchronized=False, progress=None, cancelled=None, rows_loaded=None, sequential=False, row_ready=None, collections=None):
         """Retrieve the inventory, reporting progress through ``progress``."""
         def check_cancelled():
             if cancelled and cancelled.is_set():
@@ -238,19 +238,28 @@ class ChemotionClient:
         check_cancelled()
         if progress: progress("Retrieving the selected Chemotion collection…")
         self.login(); check_cancelled(); samples = []
+        selected = collections if collections is not None else [{"id": collection_id, "_synchronized": synchronized}]
+        sample_contexts = {}
         # ElementSet handles pagination and synchronized collection queries;
         # retain raw listing records without triggering serial detail loads.
-        elements = ElementSet(self.connection, {"name": "sample", "is_generic": False},
-                              collection_id, collection_is_sync=synchronized)
-        elements.load_elements(per_page=100)
-        while True:
+        for collection in selected:
             check_cancelled()
-            batch = [sample.json_data for sample in list.__iter__(elements)]
-            samples.extend(batch)
-            if progress: progress(f"Retrieving the list of {len(elements)} samples…")
-            if elements.page >= elements.max_page or not batch: break
-            check_cancelled()
-            elements.next_page()
+            collection_id = collection["id"]
+            synchronized = bool(collection.get("_synchronized"))
+            elements = ElementSet(self.connection, {"name": "sample", "is_generic": False},
+                                  collection_id, collection_is_sync=synchronized)
+            elements.load_elements(per_page=100)
+            while True:
+                check_cancelled()
+                batch = [sample.json_data for sample in list.__iter__(elements)]
+                for sample in batch:
+                    if sample["id"] not in sample_contexts:
+                        sample_contexts[sample["id"]] = (collection_id, synchronized)
+                        samples.append(sample)
+                if progress: progress(f"Retrieving the list of {len(samples)} samples…")
+                if elements.page >= elements.max_page or not batch: break
+                check_cancelled()
+                elements.next_page()
         # The compact list intentionally omits physical location and amount fields.
         # Fetching each sample serially is very slow, so use a small, bounded pool.
         # Each worker owns its authenticated chemotionapi session; mutable
@@ -266,7 +275,8 @@ class ChemotionClient:
             if client is None:
                 client = ChemotionClient(); client.login(); worker_state.client = client
             check_cancelled()
-            row = client.inventory_entry(sample["id"], collection_id, synchronized, sample)
+            sample_collection_id, sample_synchronized = sample_contexts[sample["id"]]
+            row = client.inventory_entry(sample["id"], sample_collection_id, sample_synchronized, sample)
             row["_inventory_position"] = positions[sample["id"]]
             # Retain retrieved details even if Stop interrupts thumbnail display.
             rows[positions[sample["id"]]] = row
