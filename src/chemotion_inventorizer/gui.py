@@ -526,13 +526,17 @@ class Inventorizer(tk.Tk):
         self.structure_size_spinbox = ttk.Spinbox(self.location_controls, from_=20, to=200,
                                                  textvariable=self.structure_size_value, width=3)
         self.structure_size_spinbox.pack(side="left", padx=4)
+        for entry in (self.server_entry, self.username_entry, self.password_entry):
+            entry.bind("<KP_Enter>", self.login_from_return)
         self.structure_size_spinbox.bind("<Return>", self.finish_structure_size_edit)
+        self.structure_size_spinbox.bind("<KP_Enter>", self.finish_structure_size_edit)
         self.structure_size_spinbox.bind("<FocusOut>", self.finish_structure_size_edit)
         ttk.Label(self.location_controls, text="Font size:").pack(side="left", padx=(12, 0))
         self.font_size_spinbox = ttk.Spinbox(self.location_controls, from_=8, to=48,
                                              textvariable=self.font_size_value, width=3)
         self.font_size_spinbox.pack(side="left", padx=4)
         self.font_size_spinbox.bind("<Return>", self.finish_font_size_edit)
+        self.font_size_spinbox.bind("<KP_Enter>", self.finish_font_size_edit)
         self.font_size_spinbox.bind("<FocusOut>", self.finish_font_size_edit)
         column_labels = dict(zip(self.keys, self.headings))
         selector_keys = self.column_menu_order
@@ -1461,6 +1465,7 @@ class Inventorizer(tk.Tk):
         self.amount_editor = editor
         editor.focus_set(); editor.selection_range(0, "end")
         editor.bind("<Return>", lambda _event: self.finish_amount_edit(row, advance=True))
+        editor.bind("<KP_Enter>", lambda _event: self.finish_amount_edit(row, advance=True))
         editor.bind("<Escape>", self.defocus_field)
         self.bind_editor_navigation(editor, item_id)
         editor.bind("<FocusOut>", lambda _event: self.finish_amount_edit(row))
@@ -1475,6 +1480,7 @@ class Inventorizer(tk.Tk):
         self.place_editor(editor, item_id, "vendor"); self.amount_editor = editor
         editor.focus_set(); editor.selection_range(0, "end")
         editor.bind("<Return>", lambda _event: self.finish_vendor_edit(row, advance=True))
+        editor.bind("<KP_Enter>", lambda _event: self.finish_vendor_edit(row, advance=True))
         editor.bind("<Escape>", self.defocus_field)
         self.bind_editor_navigation(editor, item_id)
         editor.bind("<FocusOut>", lambda _event: self.finish_vendor_edit(row))
@@ -1490,6 +1496,7 @@ class Inventorizer(tk.Tk):
         self.place_editor(editor, item_id, "location"); self.amount_editor = editor
         editor.focus_set(); editor.selection_range(0, "end")
         editor.bind("<Return>", lambda _event: self.finish_location_edit(row, advance=True))
+        editor.bind("<KP_Enter>", lambda _event: self.finish_location_edit(row, advance=True))
         editor.bind("<<ComboboxSelected>>", lambda _event: self.finish_location_edit(row))
         editor.bind("<Escape>", self.defocus_field)
         self.bind_editor_navigation(editor, item_id)
@@ -1507,6 +1514,7 @@ class Inventorizer(tk.Tk):
         self.amount_editor = editor
         editor.focus_set(); editor.selection_range(0, "end")
         editor.bind("<Return>", lambda _event: self.finish_amount_edit(row, advance=True))
+        editor.bind("<KP_Enter>", lambda _event: self.finish_amount_edit(row, advance=True))
         editor.bind("<Escape>", self.defocus_field)
         self.bind_editor_navigation(editor, item_id)
         editor.bind("<FocusOut>", lambda _event: self.finish_amount_edit(row))
@@ -1521,6 +1529,7 @@ class Inventorizer(tk.Tk):
         self.place_editor(editor, item_id, field); self.amount_editor = editor
         editor.focus_set(); editor.selection_range(0, "end")
         editor.bind("<Return>", lambda _event: self.finish_name_edit(row, field, advance=True))
+        editor.bind("<KP_Enter>", lambda _event: self.finish_name_edit(row, field, advance=True))
         editor.bind("<Escape>", self.defocus_field)
         self.bind_editor_navigation(editor, item_id)
         editor.bind("<FocusOut>", lambda _event: self.finish_name_edit(row, field))
@@ -1686,6 +1695,7 @@ class Inventorizer(tk.Tk):
         editor.bind("<Up>", lambda _event: self.move_editor_focus(item_id, -1))
         editor.bind("<Down>", lambda _event: self.move_editor_focus(item_id, 1))
         editor.bind("<Shift-Return>", lambda _event: self.commit_editor_navigation(item_id, "up"))
+        editor.bind("<Shift-KP_Enter>", lambda _event: self.commit_editor_navigation(item_id, "up"))
         editor.bind("<Tab>", lambda _event: self.commit_editor_navigation(item_id, "right"))
         editor.bind("<Shift-Tab>", lambda _event: self.commit_editor_navigation(item_id, "left"))
         editor.bind("<ISO_Left_Tab>", lambda _event: self.commit_editor_navigation(item_id, "left"))
