@@ -58,7 +58,7 @@ def test_pixel_wheel_moves_less_than_one_row(system, delta, expected):
     drain(callbacks)
     assert sum(step for step, unit in movements) == expected
     assert max(step for step, unit in movements) < expected
-    assert "<TouchpadScroll>" in bindings
+    assert "<TouchpadScroll>" not in bindings
 
 
 def test_pixel_wheel_preserves_fractional_motion():

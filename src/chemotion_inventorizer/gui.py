@@ -324,14 +324,8 @@ def enable_table_smooth_scrolling(tree):
     if animation:
         tree.bind("<Destroy>", animation.destroy, add="+")
 
-        def touchpad(event):
-            # Handle every event; Tk's default binding only uses every fifth.
-            dx, dy = tree.tk.splitlist(tree.tk.call("tk::PreciseScrollDeltas", event.delta))
-            animation.add("x", -float(dx) / 5)
-            animation.add("y", -float(dy) / 5)
-            return "break"
-
-        tree.bind("<TouchpadScroll>", touchpad)
+        # Keep Tk's native TouchpadScroll binding: it coalesces precise events
+        # and already receives macOS momentum. Extra easing adds redraws/latency.
 
     def scroll(event, axis):
         if getattr(tree, "pixel_scrolling", False):
