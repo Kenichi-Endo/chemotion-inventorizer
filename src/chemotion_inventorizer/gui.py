@@ -567,8 +567,6 @@ class Inventorizer(tk.Tk):
                                       self.collection_menu.bind_class("Listbox", "<Control-Button-1>") + "\nbreak")
         self.loaded_collections = []
         self.startup_load_pending = True
-        self.cancel_load_button = ttk.Button(self.collection_controls, text="Cancel", command=self.cancel_inventory_load, state="disabled")
-        self.cancel_load_button.pack(side="left", padx=(0, 4))
         self.refresh_button = ttk.Button(self.collection_controls, text="Go", command=self.refresh)
         self.refresh_button.pack(side="left", padx=4)
 
@@ -671,10 +669,7 @@ class Inventorizer(tk.Tk):
         self.status = StatusLabel(self.status_area, text="0 samples"); self.status.pack(anchor="w")
         self.progress = ttk.Progressbar(self.progress_area, mode="determinate", maximum=100, style="Inventory.Horizontal.TProgressbar")
         self.progress.pack(side="left", fill="x", expand=True)
-        self.cancel_load_button.destroy()
-        self.cancel_load_button = ttk.Button(self.progress_area, text="Stop", command=self.cancel_inventory_load, state="disabled")
-        self.cancel_load_button.pack(side="right", padx=(8, 0))
-        self.bind("<Escape>", lambda _event: self.cancel_load_button.invoke(), add="+")
+        self.bind("<Escape>", self.cancel_inventory_load, add="+")
         self.apply_appearance(True); self.watch_system_appearance()
         self.after_idle(self.maximize_window)
         if username and password and client.CHEMOTION_URL != DEFAULT_CHEMOTION_URL:
@@ -1059,7 +1054,7 @@ class Inventorizer(tk.Tk):
         if not self.inventory_loading or not self.inventory_cancel_event or self.inventory_cancel_event.is_set():
             return
         self.inventory_cancel_event.set()
-        self.cancel_load_button.configure(state="disabled")
+        self.refresh_button.configure(state="disabled")
         self.status.configure(text="Stopping collection loading…", fg=self.colors["muted"])
         return "break"
     def _retrieve(self, collection, cancelled, with_structures=False):
@@ -1142,8 +1137,12 @@ class Inventorizer(tk.Tk):
     def set_controls_busy(self, busy):
         collection = self.collection_choices.get(self.collection_value.get())
         self.export_button.configure(state="normal" if not busy and self.logged_in and collection and not collection.get("_synchronized") else "disabled")
-        self.refresh_button.configure(state="disabled" if busy else "normal")
-        self.cancel_load_button.configure(state="normal" if busy and self.inventory_loading else "disabled")
+        loading = busy and self.inventory_loading
+        stopping = loading and self.inventory_cancel_event is not None and self.inventory_cancel_event.is_set()
+        self.refresh_button.configure(
+            text="Stop" if loading else "Go",
+            command=self.cancel_inventory_load if loading else self.refresh,
+            state="disabled" if stopping or (busy and not loading) else "normal")
         self.login_button.configure(state="disabled" if busy or self.logged_in else "normal")
         self.server_entry.configure(state="disabled" if busy else "normal")
         self.username_entry.configure(state="disabled" if busy else "normal")
