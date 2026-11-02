@@ -49,14 +49,14 @@ def test_inventory_returns_descending_numeric_label_order(monkeypatch):
     assert [row["id"] for row in client.inventory(42)] == [10, 2, 1]
 
 
-def test_sample_list_status_shows_total_without_progress(monkeypatch):
+def test_sample_list_status_shows_collection_name(monkeypatch):
     client = prepare_client(monkeypatch)
     messages = []
 
-    client.inventory(42, progress=messages.append)
+    client.inventory(42, progress=messages.append, collections=[{"id": 42, "label": "Inventory"}])
 
-    assert "Retrieving the list of 3 samples…" in messages
-    assert not any(message.startswith("Retrieving sample list:") for message in messages)
+    assert "Retrieving sample list: Inventory…" in messages
+    assert not any(message.startswith("Retrieving the list of") for message in messages)
 
 
 def test_loading_status_shows_escape_stop_hint():
@@ -493,3 +493,48 @@ def test_combined_inventory_lists_all_pages_before_details_with_one_progress(mon
     assert [row["_inventory_position"] for row in rows] == list(range(len(expected)))
     assert [message for message in messages if message.startswith("Retrieving sample information:")] == [
         f"Retrieving sample information: {index} of {len(expected)}…" for index in range(1, len(expected) + 1)]
+
+
+@pytest.mark.parametrize("aborted", [False, True])
+def test_filter_count_retains_aborted_status_until_next_load(aborted):
+    current = threading.Event()
+    if aborted:
+        current.set()
+    updates = []
+    rows = [{"id": 1}, {"id": 2}]
+    viewer = SimpleNamespace(
+        inventory_cancel_event=current, location_filter_retained_row_ids=set(),
+        filtered_rows=lambda: rows, render_rows=lambda: None,
+        tree=SimpleNamespace(selection=lambda: (), selection_set=lambda ids: None),
+        column_visibility={"structure": SimpleNamespace(get=lambda: False)},
+        status=SimpleNamespace(configure=lambda **kwargs: updates.append(kwargs)),
+        colors={"muted": "gray"},
+    )
+    for count in (2, 1, 0):
+        del rows[count:]
+        app.Inventorizer.filter_by_location(viewer)
+        assert updates[-1]["text"] == app.inventory_status_text(count, []) + (" (aborted)" if aborted else "")
+    viewer.inventory_cancel_event = threading.Event()
+    app.Inventorizer.filter_by_location(viewer)
+    assert not updates[-1]["text"].endswith("(aborted)")
+
+
+@pytest.mark.parametrize("aborted", [False, True])
+def test_loaded_status_marks_aborted_load(aborted):
+    current = threading.Event()
+    if aborted:
+        current.set()
+    updates = []
+    viewer = SimpleNamespace(
+        inventory_cancel_event=current, location_filter_retained_row_ids=set(),
+        loaded_collections=[], update_location_filter=lambda: None,
+        render_rows=lambda: None, hide_progress=lambda: None,
+        filtered_rows=lambda: viewer.rows,
+        status=SimpleNamespace(configure=lambda **kwargs: updates.append(kwargs)),
+        colors={"muted": "gray"}, set_controls_busy=lambda busy: None,
+        print_button=SimpleNamespace(configure=lambda **kwargs: None),
+        column_visibility={"structure": SimpleNamespace(get=lambda: False)},
+    )
+    app.Inventorizer._loaded(viewer, [{"id": 10}], current)
+    expected = app.inventory_status_text(1, []) + (" (aborted)" if aborted else "")
+    assert updates[-1]["text"] == expected

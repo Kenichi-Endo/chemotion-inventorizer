@@ -246,6 +246,8 @@ class ChemotionClient:
             check_cancelled()
             collection_id = collection["id"]
             synchronized = bool(collection.get("_synchronized"))
+            collection_label = collection.get("label") or collection.get("name") or str(collection_id)
+            if progress: progress(f"Retrieving sample list: {collection_label}…")
             elements = ElementSet(self.connection, {"name": "sample", "is_generic": False},
                                   collection_id, collection_is_sync=synchronized)
             elements.load_elements(per_page=100)
@@ -256,7 +258,6 @@ class ChemotionClient:
                     if sample["id"] not in sample_contexts:
                         sample_contexts[sample["id"]] = (collection_id, synchronized)
                         samples.append(sample)
-                if progress: progress(f"Retrieving the list of {len(samples)} samples…")
                 if elements.page >= elements.max_page or not batch: break
                 check_cancelled()
                 elements.next_page()

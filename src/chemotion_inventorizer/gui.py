@@ -1107,7 +1107,8 @@ class Inventorizer(tk.Tk):
     def _loaded(self, rows, cancelled=None):
         if cancelled is not None and cancelled is not self.inventory_cancel_event: return
         self.inventory_loading = False
-        self.rows=rows; self.location_filter_retained_row_ids.clear(); self.update_location_filter(); self.render_rows(); self.hide_progress(); self.status.configure(text=inventory_status_text(len(self.filtered_rows()), self.loaded_collections),fg=self.colors["muted"]); self.set_controls_busy(False); self.print_button.configure(state="normal" if rows else "disabled")
+        suffix = " (aborted)" if cancelled is not None and cancelled.is_set() else ""
+        self.rows=rows; self.location_filter_retained_row_ids.clear(); self.update_location_filter(); self.render_rows(); self.hide_progress(); self.status.configure(text=inventory_status_text(len(self.filtered_rows()), self.loaded_collections) + suffix,fg=self.colors["muted"]); self.set_controls_busy(False); self.print_button.configure(state="normal" if rows else "disabled")
         if self.column_visibility["structure"].get():
             self.load_structure_images(self.filtered_rows())
     def _cancelled(self, cancelled, rows=None):
@@ -1198,7 +1199,9 @@ class Inventorizer(tk.Tk):
         self.render_rows(); count = len(self.filtered_rows())
         if self.column_visibility["structure"].get() and not self.inventory_loading:
             self.load_structure_images(self.filtered_rows())
-        self.status.configure(text=inventory_status_text(count, getattr(self, "loaded_collections", [])), fg=self.colors["muted"])
+        cancelled = getattr(self, "inventory_cancel_event", None)
+        suffix = " (aborted)" if cancelled is not None and cancelled.is_set() else ""
+        self.status.configure(text=inventory_status_text(count, getattr(self, "loaded_collections", [])) + suffix, fg=self.colors["muted"])
     def update_filter_placeholder(self, _event=None):
         placeholder = not self.text_filter.get() and self.focus_get() != self.filter_entry
         self.updating_filter_display = True
@@ -1730,7 +1733,7 @@ class Inventorizer(tk.Tk):
         try:
             client = ChemotionClient(); client.login()
             refreshed = client.inventory_entry(row["id"], row.get("collection_id"), row.get("synchronized", False))
-            self.after(0, self._entry_refreshed, row, refreshed, f"Refreshed {row['label']} after opening Chemotion.")
+            self.after(0, self._entry_refreshed, row, refreshed, "")
         except Exception as error:
             self.after(0, self._opened_sample_refresh_failed, str(error))
     def _opened_sample_refresh_failed(self, error):
