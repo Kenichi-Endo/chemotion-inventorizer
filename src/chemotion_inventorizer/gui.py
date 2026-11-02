@@ -152,6 +152,8 @@ class InventoryTreeview(ttk.Treeview):
         self.row_pixels = 1
         self.partial_frame = None
         self.partial_refresh = None
+        self.partial_scroll_timer = None
+        self.partial_views = {}
         if self.pixel_scrolling:
             style = ttk.Style(self)
             style.configure("Pixel.Inventory.Treeview", rowheight=1)
@@ -171,8 +173,11 @@ class InventoryTreeview(ttk.Treeview):
             if option in kwargs and getattr(self, "pixel_scrolling", False):
                 callback = kwargs[option]
 
-                def changed(first, last, callback=callback):
-                    self.queue_partial_refresh()
+                def changed(first, last, callback=callback, axis=option):
+                    view = (float(first), float(last))
+                    if self.partial_views.get(axis) != view:
+                        self.partial_views[axis] = view
+                        self.defer_partial_refresh()
                     if callable(callback):
                         callback(first, last)
                     elif callback:
@@ -192,8 +197,24 @@ class InventoryTreeview(ttk.Treeview):
         return "break"
 
     def queue_partial_refresh(self, _event=None):
-        if self.partial_frame is not None and self.partial_refresh is None:
-            self.partial_refresh = self.after_idle(self.draw_partial_row)
+        if (self.partial_frame is not None and self.partial_refresh is None
+                and self.partial_scroll_timer is None):
+            self.partial_refresh = self.after(0, self.draw_partial_row)
+
+    def defer_partial_refresh(self):
+        """Hide the clipped row until scrolling has settled."""
+        if self.partial_refresh is not None:
+            self.after_cancel(self.partial_refresh)
+            self.partial_refresh = None
+        if self.partial_scroll_timer is not None:
+            self.after_cancel(self.partial_scroll_timer)
+        if self.partial_frame.winfo_ismapped():
+            self.partial_frame.place_forget()
+        self.partial_scroll_timer = self.after(120, self.finish_partial_scroll)
+
+    def finish_partial_scroll(self):
+        self.partial_scroll_timer = None
+        self.queue_partial_refresh()
 
     def partial_row(self):
         if not self.pixel_scrolling or not self.partial_frame.winfo_ismapped():
