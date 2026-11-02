@@ -267,7 +267,8 @@ def test_library_pagination_loads_every_page(client, sample_server, monkeypatch,
     rows = client.inventory(42, synchronized=synchronized, progress=progress.append)
     assert pages == [1, 2]
     assert [row["id"] for row in rows] == list(range(101, 0, -1))
-    assert "Retrieving the list of 101 samples…" in progress
+    assert "Retrieving sample list: 42…" in progress
+    assert "Retrieving sample information: 101 of 101…" in progress
 
 
 @pytest.mark.parametrize("synchronized", [False, True])
