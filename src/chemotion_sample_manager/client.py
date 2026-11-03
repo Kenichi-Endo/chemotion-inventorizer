@@ -241,7 +241,7 @@ class ChemotionClient:
         # only leaves, while preserving every nested selectable collection.
         leaves = (item for item in found.values() if not item.get("children"))
         return sorted(leaves, key=lambda item: str(item.get("label") or "").casefold())
-    def inventory(self, collection_id, synchronized=False, progress=None, cancelled=None, rows_loaded=None, sequential=False, row_ready=None, collections=None):
+    def inventory(self, collection_id, synchronized=False, progress=None, cancelled=None, rows_loaded=None, sequential=False, row_ready=None, collections=None, newest_first=True):
         """Retrieve the inventory, reporting progress through ``progress``."""
         def check_cancelled():
             if cancelled and cancelled.is_set():
@@ -278,7 +278,7 @@ class ChemotionClient:
         # Each worker owns its authenticated chemotionapi session; mutable
         # sessions must not be shared between threads.
         if not samples: return []
-        samples.sort(key=lambda sample: natural_sort_value(shown(sample.get("short_label"))), reverse=True)
+        samples.sort(key=lambda sample: natural_sort_value(shown(sample.get("short_label"))), reverse=newest_first)
         positions = {sample["id"]: position for position, sample in enumerate(samples)}
         rows = [None] * len(samples)
         sample_details = {}

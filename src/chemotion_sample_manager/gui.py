@@ -563,6 +563,11 @@ class SampleManager(tk.Tk):
                                       self.collection_menu.bind_class("Listbox", "<Control-Button-1>") + "\nbreak")
         self.loaded_collections = []
         self.startup_load_pending = True
+        self.loading_order = tk.StringVar(value=("Oldest samples first" if self.profile_settings.get("newest_samples_first") is False else "Newest samples first"))
+        self.loading_order_menu = ttk.OptionMenu(self.collection_controls, self.loading_order,
+                                                 self.loading_order.get(),
+                                                 "Newest samples first", "Oldest samples first")
+        self.loading_order_menu.pack(side="left", padx=4)
         self.refresh_button = ttk.Button(self.collection_controls, text="Go", command=self.refresh)
         self.refresh_button.pack(side="left", padx=4)
 
@@ -1046,12 +1051,14 @@ class SampleManager(tk.Tk):
         self.profile_settings["last_collections"] = [
             {"id": collection["id"], "synchronized": bool(collection.get("_synchronized"))}
             for collection in collections]
+        newest_first = self.loading_order.get() == "Newest samples first"
+        self.profile_settings["newest_samples_first"] = newest_first
         save_profile_settings(self.profile_settings)
         self.loaded_collections = [dict(collection) for collection in collections]
         self.rows = []; self.structure_rows_pending.clear(); self.selected_row_ids.clear(); self.location_filter_retained_row_ids.clear(); self.render_rows()
-        self.sort_key = "label"; self.sort_reverse = True; self.update_sort_headings()
+        self.sort_key = "label"; self.sort_reverse = newest_first; self.update_sort_headings()
         cancelled = threading.Event(); self.inventory_cancel_event = cancelled; self.inventory_loading = True
-        self.set_controls_busy(True); self.show_progress(); self.status.configure(text="Retrieving the selected Chemotion collections… (Esc to stop)",fg=self.colors["accent"]); threading.Thread(target=self._retrieve, args=(collections, cancelled, self.column_visibility["structure"].get()), daemon=True).start()
+        self.set_controls_busy(True); self.show_progress(); self.status.configure(text="Retrieving the selected Chemotion collections… (Esc to stop)",fg=self.colors["accent"]); threading.Thread(target=self._retrieve, args=(collections, cancelled, self.column_visibility["structure"].get(), newest_first), daemon=True).start()
     def cancel_inventory_load(self, _event=None):
         if not self.inventory_loading or not self.inventory_cancel_event or self.inventory_cancel_event.is_set():
             return
@@ -1059,7 +1066,7 @@ class SampleManager(tk.Tk):
         self.refresh_button.configure(state="disabled")
         self.status.configure(text="Stopping collection loading…", fg=self.colors["muted"])
         return "break"
-    def _retrieve(self, collection, cancelled, with_structures=False):
+    def _retrieve(self, collection, cancelled, with_structures=False, newest_first=True):
         collections = [collection] if isinstance(collection, dict) else collection
         collection = collections[0]
         try:
@@ -1069,7 +1076,7 @@ class SampleManager(tk.Tk):
                 self.after(0, self._rows_loaded, rows, cancelled)
             rows = ChemotionClient().inventory(collection["id"], collection.get("_synchronized", False),
                                                 lambda message: self.after(0, self._progress, message, cancelled), cancelled,
-                                                rows_loaded=deliver_rows, collections=collections)
+                                                rows_loaded=deliver_rows, collections=collections, newest_first=newest_first)
             self.after(0, self._loaded, rows, cancelled)
         except InventoryLoadCancelled as stopped:
             self.after(0, self._cancelled, cancelled, stopped.rows)
@@ -1143,6 +1150,7 @@ class SampleManager(tk.Tk):
         self.password_entry.configure(state="disabled" if busy else "normal")
         self.remember_checkbutton.configure(state="disabled" if busy else "normal")
         self.collection_selection_locked = busy
+        self.loading_order_menu.configure(state="disabled" if busy else "normal")
         self.collection_menu.configure(state="normal" if self.collection_choices else "disabled")
         self.location_filter_menu.configure(state="disabled" if busy else "readonly")
     def guard_collection_selection(self, event):

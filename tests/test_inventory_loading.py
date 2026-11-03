@@ -50,6 +50,14 @@ def test_inventory_returns_descending_numeric_label_order(monkeypatch):
     assert [row["id"] for row in client.inventory(42)] == [10, 2, 1]
 
 
+def test_inventory_loads_oldest_first_when_selected(monkeypatch):
+    client = prepare_client(monkeypatch)
+    streamed = []
+    rows = client.inventory(42, newest_first=False, rows_loaded=streamed.extend)
+    assert [row["id"] for row in rows] == [1, 2, 10]
+    assert [row["id"] for row in sorted(streamed, key=lambda row: row["_inventory_position"])] == [1, 2, 10]
+
+
 def test_details_load_in_batches_of_100_and_stream_before_next_batch(monkeypatch):
     client = prepare_client(monkeypatch)
     mock_sample_list(monkeypatch, range(205))
