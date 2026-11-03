@@ -9,6 +9,7 @@ import zipfile
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from pathlib import Path
+from queue import Empty, Queue
 from urllib.parse import urlencode
 from urllib.parse import urlsplit
 from chemotion_api import Instance
@@ -245,9 +246,11 @@ class ChemotionClient:
         return sorted(leaves, key=lambda item: str(item.get("label") or "").casefold())
     def inventory(self, collection_id, synchronized=False, progress=None, cancelled=None, rows_loaded=None, sequential=False, row_ready=None, collections=None, newest_first=True):
         """Retrieve the inventory, reporting progress through ``progress``."""
+        stopped = threading.Event()
+        rows = []
         def check_cancelled():
-            if cancelled and cancelled.is_set():
-                raise InventoryLoadCancelled()
+            if stopped.is_set() or (cancelled and cancelled.is_set()):
+                raise InventoryLoadCancelled([row for row in rows if row is not None])
 
         check_cancelled()
         selected = collections if collections is not None else [{"id": collection_id, "_synchronized": synchronized}]
@@ -279,53 +282,77 @@ class ChemotionClient:
             with client.connection.get("/api/v1/samples.json", data=payload) as response:
                 return response.json().get("samples", []), None
 
-        # Collections and their pages share one bounded pool. Merge in selection
-        # order so overlapping collections retain the same sample context.
-        workers = 1 if sequential else MAX_CONCURRENT_LIST_REQUESTS
-        executor = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="sample-list")
-        pending = {}
-        page_samples = {}
-        remaining_pages = {}
-        completed_collections = 0
-        jobs = deque((index, 1) for index in range(len(selected)))
-        try:
-            while pending or jobs:
-                check_cancelled()
-                while len(pending) < workers and jobs:
+        listing_queue = Queue()
+        listing_finished = threading.Event()
+        discovered_count = 0
+
+        def retrieve_lists():
+            nonlocal discovered_count
+            # Lists keep advancing independently while the consumer loads details.
+            workers = 1 if sequential else MAX_CONCURRENT_LIST_REQUESTS
+            executor = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="sample-list")
+            pending = {}
+            page_samples = {}
+            page_counts = {}
+            remaining_pages = {}
+            completed_collections = 0
+            next_collection, next_page = 0, 1
+            jobs = deque((index, 1) for index in range(len(selected)))
+            try:
+                while pending or jobs:
                     check_cancelled()
-                    index, page = jobs.popleft()
-                    collection = selected[index]
-                    pending[executor.submit(retrieve_page, collection, page)] = (index, page)
-                done, _ = wait(pending, timeout=0.1, return_when=FIRST_COMPLETED)
-                for future in done:
-                    index, page = pending.pop(future)
-                    batch, max_page = future.result()
-                    page_samples[index, page] = batch
-                    if page == 1:
-                        remaining_pages[index] = max_page
-                        jobs.extend((index, number) for number in range(2, max_page + 1))
-                    remaining_pages[index] -= 1
-                    if remaining_pages[index] == 0:
-                        completed_collections += 1
-                        if progress:
-                            progress(f"Retrieving {collection_word}: {completed_collections} of {len(selected)}…")
-        finally:
-            executor.shutdown(wait=not (cancelled and cancelled.is_set()), cancel_futures=True)
-        check_cancelled()
-        for (index, page), batch in sorted(page_samples.items()):
-            collection = selected[index]
-            for sample in batch:
-                if sample["id"] not in sample_contexts:
-                    sample_contexts[sample["id"]] = (collection["id"], bool(collection.get("_synchronized")))
-                    samples.append(sample)
+                    while len(pending) < workers and jobs:
+                        check_cancelled()
+                        index, page = jobs.popleft()
+                        pending[executor.submit(retrieve_page, selected[index], page)] = (index, page)
+                    done, _ = wait(pending, timeout=0.1, return_when=FIRST_COMPLETED)
+                    for future in done:
+                        index, page = pending.pop(future)
+                        batch, max_page = future.result()
+                        page_samples[index, page] = batch
+                        if page == 1:
+                            page_counts[index] = max_page
+                            remaining_pages[index] = max_page
+                            jobs.extend((index, number) for number in range(2, max_page + 1))
+                        remaining_pages[index] -= 1
+                        if remaining_pages[index] == 0:
+                            completed_collections += 1
+                            if progress:
+                                progress(f"Retrieving {collection_word}: {completed_collections} of {len(selected)}…")
+                    # Release pages in selection order to keep duplicate samples
+                    # attached to the first selected collection, regardless of timing.
+                    ready_batches = []
+                    while (next_collection, next_page) in page_samples:
+                        collection = selected[next_collection]
+                        batch = []
+                        for sample in page_samples.pop((next_collection, next_page)):
+                            if sample["id"] not in sample_contexts:
+                                sample_contexts[sample["id"]] = (collection["id"], bool(collection.get("_synchronized")))
+                                batch.append(sample)
+                        discovered_count += len(batch)
+                        if batch:
+                            ready_batches.append(batch)
+                        if next_page == page_counts[next_collection]:
+                            next_collection += 1
+                            next_page = 1
+                        else:
+                            next_page += 1
+                    if not pending and not jobs:
+                        listing_finished.set()
+                    for batch in ready_batches:
+                        listing_queue.put(batch)
+            except Exception as error:
+                listing_queue.put(error)
+            finally:
+                executor.shutdown(wait=not (stopped.is_set() or (cancelled and cancelled.is_set())), cancel_futures=True)
+                listing_finished.set()
+                listing_queue.put(None)
+
         # The compact list intentionally omits physical location and amount fields.
-        # Fetch details in batches, then use a bounded pool for chemical metadata.
+        # Fetch details for available pages while later lists are still arriving.
         # Each worker owns its authenticated chemotionapi session; mutable
         # sessions must not be shared between threads.
-        if not samples: return []
-        samples.sort(key=lambda sample: natural_sort_value(shown(sample.get("short_label"))), reverse=newest_first)
-        positions = {sample["id"]: position for position, sample in enumerate(samples)}
-        rows = [None] * len(samples)
+        positions = {}
         sample_details = {}
         worker_state = threading.local()
         def retrieve_sample(sample):
@@ -344,8 +371,10 @@ class ChemotionClient:
                 row_ready([row])
             return row
 
-        workers = 1 if sequential else min(MAX_CONCURRENT_SAMPLE_REQUESTS, len(samples))
+        workers = 1 if sequential else MAX_CONCURRENT_SAMPLE_REQUESTS
         executor = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="sample-retrieval")
+        listing_thread = threading.Thread(target=retrieve_lists, name="sample-list-coordinator", daemon=True)
+        listing_thread.start()
         try:
             futures = {}
             next_sample = 0
@@ -354,9 +383,24 @@ class ChemotionClient:
             pending = set()
             batch_supported = True
             empty_batch_contexts = set()
-            while pending or next_sample < len(samples):
-                if cancelled and cancelled.is_set():
-                    raise InventoryLoadCancelled([row for row in rows if row is not None])
+            listing_done = False
+            while pending or next_sample < len(samples) or not listing_done:
+                check_cancelled()
+                if not pending and next_sample == len(samples):
+                    try:
+                        batch = listing_queue.get(timeout=0.1)
+                    except Empty:
+                        continue
+                    if isinstance(batch, Exception):
+                        raise batch
+                    if batch is None:
+                        listing_done = True
+                        continue
+                    batch.sort(key=lambda sample: natural_sort_value(shown(sample.get("short_label"))), reverse=newest_first)
+                    for sample in batch:
+                        positions[sample["id"]] = len(samples)
+                        samples.append(sample)
+                        rows.append(None)
                 if not pending and next_sample == batch_end:
                     batch_end = min(next_sample + SAMPLE_DETAIL_BATCH_SIZE, len(samples))
                     sample_details.clear()
@@ -395,17 +439,23 @@ class ChemotionClient:
                         raise InventoryLoadCancelled([row for row in rows if row is not None])
                     batch_rows.append(rows[futures[future]])
                     completed += 1
-                    if progress: progress(f"Retrieving sample information: {completed} of {len(samples)}…")
+                    if progress and listing_finished.is_set():
+                        progress(f"Retrieving sample information: {completed} of {discovered_count}…")
                 if batch_rows and rows_loaded:
                     rows_loaded(batch_rows)
                 if cancelled and cancelled.is_set():
                     raise InventoryLoadCancelled([row for row in rows if row is not None])
         finally:
-            if cancelled and cancelled.is_set():
-                for future in (futures if "futures" in locals() else ()):
-                    future.cancel()
+            stopped.set()
             executor.shutdown(wait=not (cancelled and cancelled.is_set()), cancel_futures=True)
-        return rows
+            listing_thread.join(timeout=0.3)
+        # Later pages can contain labels preceding those already shown. The GUI
+        # sorts visible rows; assign final positions once discovery is complete.
+        samples.sort(key=lambda sample: natural_sort_value(shown(sample.get("short_label"))), reverse=newest_first)
+        ordered_rows = [rows[positions[sample["id"]]] for sample in samples]
+        for position, row in enumerate(ordered_rows):
+            row["_inventory_position"] = position
+        return ordered_rows
     def sample_details(self, sample_ids, collection_id, synchronized=False):
         """Fetch up to 100 full sample records through the read-only batch route."""
         if not sample_ids:

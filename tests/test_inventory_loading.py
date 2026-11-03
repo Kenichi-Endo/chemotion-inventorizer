@@ -103,6 +103,104 @@ def test_inventory_loads_oldest_first_when_selected(monkeypatch):
 
 
 @pytest.mark.parametrize("stop", [False, True])
+@pytest.mark.parametrize("newest_first", [False, True])
+def test_details_and_rows_arrive_while_later_list_page_is_blocked(monkeypatch, stop, newest_first):
+    client = prepare_client(monkeypatch)
+    early_row = threading.Event()
+    third_page = threading.Event()
+    second_page = threading.Event()
+    cancelled = threading.Event()
+    entries = []
+    delivered = []
+    messages = []
+    original_send = api_client.InventoryConnection.send
+
+    def send(self, request, **kwargs):
+        if not request.url.endswith("/api/v1/samples.json"):
+            return original_send(self, request, **kwargs)
+        page = int(parse_qs(request.body)["page"][0])
+        if page == 2:
+            assert early_row.wait(3), "Later page waited for an early displayed sample"
+            second_page.set()
+        if page == 3:
+            third_page.set()
+        numbers = {1: (10,), 2: (1,), 3: (20, 10)}[page]
+        response = Response()
+        response.status_code = 200
+        response.headers.update({"X-Total": "201", "X-Total-Pages": "3"})
+        response._content = json.dumps({"samples": [
+            {"id": number, "type": "sample", "molecule": {}, "short_label": f"S{number}"}
+            for number in numbers]}).encode()
+        return response
+
+    def entry(self, sample_id, *args):
+        if sample_id == 10:
+            assert third_page.wait(3), "Lists must keep advancing during detail loading"
+        entries.append(sample_id)
+        return {"id": sample_id}
+
+    def loaded(rows):
+        delivered.extend(rows)
+        if rows[0]["id"] == 10:
+            assert not second_page.is_set()
+            assert messages[-1] == "Retrieving collection: 0 of 1…"
+            if stop:
+                cancelled.set()
+            early_row.set()
+
+    monkeypatch.setattr(api_client.InventoryConnection, "send", send)
+    monkeypatch.setattr(api_client.ChemotionClient, "inventory_entry", entry)
+    try:
+        if stop:
+            with pytest.raises(api_client.InventoryLoadCancelled) as stopped:
+                client.inventory(42, cancelled=cancelled, rows_loaded=loaded,
+                                 progress=messages.append, newest_first=newest_first)
+            assert entries == [10]
+            assert stopped.value.rows == delivered == [{"id": 10, "_inventory_position": 0}]
+        else:
+            rows = client.inventory(42, rows_loaded=loaded, progress=messages.append,
+                                    newest_first=newest_first)
+            assert entries == [10, 1, 20]
+            assert [row["id"] for row in rows] == ([20, 10, 1] if newest_first else [1, 10, 20])
+            assert [row["_inventory_position"] for row in rows] == [0, 1, 2]
+            assert len(delivered) == 3
+    finally:
+        early_row.set()
+
+
+def test_later_list_error_is_reported_after_early_rows(monkeypatch):
+    client = prepare_client(monkeypatch)
+    delivered = threading.Event()
+    rows = []
+    original_send = api_client.InventoryConnection.send
+
+    def send(self, request, **kwargs):
+        if not request.url.endswith("/api/v1/samples.json"):
+            return original_send(self, request, **kwargs)
+        page = int(parse_qs(request.body)["page"][0])
+        if page == 2:
+            assert delivered.wait(3)
+            raise ValueError("Invalid later page")
+        response = Response()
+        response.status_code = 200
+        response.headers.update({"X-Total": "101", "X-Total-Pages": "2"})
+        response._content = b'{"samples": [{"id": 10, "type": "sample", "molecule": {}, "short_label": "S10"}]}'
+        return response
+
+    def loaded(batch):
+        rows.extend(batch)
+        delivered.set()
+
+    monkeypatch.setattr(api_client.InventoryConnection, "send", send)
+    try:
+        with pytest.raises(ValueError, match="Invalid later page"):
+            client.inventory(42, rows_loaded=loaded)
+        assert rows == [{"id": 10, "_inventory_position": 0}]
+    finally:
+        delivered.set()
+
+
+@pytest.mark.parametrize("stop", [False, True])
 def test_collections_overlap_and_preserve_first_selected_context(monkeypatch, stop):
     client = prepare_client(monkeypatch)
     monkeypatch.setattr(api_client, "MAX_CONCURRENT_LIST_REQUESTS", 2)
@@ -682,7 +780,7 @@ def test_row_appears_with_its_thumbnail_without_changing_retrieval_status(monkey
     assert displayed.is_set()
 
 
-def test_combined_inventory_lists_all_pages_before_details_with_one_progress(monkeypatch):
+def test_combined_inventory_streams_pages_with_first_collection_context(monkeypatch):
     client = prepare_client(monkeypatch)
     listed, requested, messages = [], [], []
     pages = {42: ((2, 10), (1,)), 43: ((2, 20),)}
@@ -708,12 +806,10 @@ def test_combined_inventory_lists_all_pages_before_details_with_one_progress(mon
     detail_batches = []
 
     def details(ids, collection_id, synchronized):
-        assert sorted(listed) == all_pages
         detail_batches.append((ids, collection_id, synchronized))
         return {}
 
     def entry(self, sample_id, collection_id, synchronized, fallback, detail):
-        assert sorted(listed) == all_pages
         requested.append((sample_id, collection_id, synchronized))
         return {"id": sample_id}
 
@@ -736,14 +832,15 @@ def test_combined_inventory_lists_all_pages_before_details_with_one_progress(mon
                             progress=messages.append)
     expected = [20, 10, 2, 1]
     assert [row["id"] for row in rows] == expected
-    assert requested == [(number, 43 if number == 20 else 42, number == 20) for number in expected]
-    assert detail_batches == [([20], 43, True), ([10, 2, 1], 42, False)]
+    assert requested == [(10, 42, False), (2, 42, False), (1, 42, False), (20, 43, True)]
+    assert detail_batches == [([10, 2], 42, False), ([20], 43, True)]
+    assert sorted(listed) == all_pages
     assert [row["_inventory_position"] for row in rows] == list(range(len(expected)))
     assert [message for message in messages if message.startswith("Retrieving collections:")] == [
         "Retrieving collections: 0 of 2…", "Retrieving collections: 1 of 2…",
         "Retrieving collections: 2 of 2…"]
-    assert [message for message in messages if message.startswith("Retrieving sample information:")] == [
-        f"Retrieving sample information: {index} of {len(expected)}…" for index in range(1, len(expected) + 1)]
+    sample_progress = [message for message in messages if message.startswith("Retrieving sample information:")]
+    assert all(message.endswith("of 4…") for message in sample_progress)
 
 
 @pytest.mark.parametrize("aborted", [False, True])
