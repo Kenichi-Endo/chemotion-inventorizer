@@ -10,9 +10,9 @@ from .inventory import (
 )
 
 
-# Retain the secure-storage identity so existing installations stay signed in.
-KEYCHAIN_SERVICE = "io.github.kenichi-endo.chemotion-inventorizer"
+KEYCHAIN_SERVICE = "io.github.kenichi-endo.chemotion-sample-manager"
 WINDOWS_CREDENTIAL_TARGET = KEYCHAIN_SERVICE
+LEGACY_CREDENTIAL_SERVICE = "io.github.kenichi-endo.chemotion-inventorizer"
 
 
 def profile_settings_path():
@@ -106,7 +106,7 @@ def print_preset(saved_preset, all_columns):
             "split_column": split_column, "split_threshold": split_threshold}
 
 
-def windows_saved_credentials():
+def windows_saved_credentials(target=WINDOWS_CREDENTIAL_TARGET):
     """Read credentials from the current Windows user's Credential Manager."""
     # Keep the import local: ctypes exposes ``windll`` only on Windows.
     import ctypes
@@ -124,7 +124,7 @@ def windows_saved_credentials():
 
     credential_pointer = ctypes.POINTER(Credential)()
     credential_type_generic = 1
-    if not credential_api.CredReadW(WINDOWS_CREDENTIAL_TARGET, credential_type_generic, 0,
+    if not credential_api.CredReadW(target, credential_type_generic, 0,
                                     ctypes.byref(credential_pointer)):
         return "", ""
     try:
@@ -163,65 +163,100 @@ def windows_save_credentials(username, password):
         raise RuntimeError(f"The credentials could not be saved in Windows Credential Manager (error {error}).")
 
 
-def windows_clear_credentials():
+def windows_clear_credentials(target=WINDOWS_CREDENTIAL_TARGET):
     """Remove the app credential from the current Windows user's Credential Manager."""
     import ctypes
     credential_api = ctypes.WinDLL("Advapi32", use_last_error=True)
-    if not credential_api.CredDeleteW(WINDOWS_CREDENTIAL_TARGET, 1, 0):
+    if not credential_api.CredDeleteW(target, 1, 0):
         # ERROR_NOT_FOUND means there was simply no credential left to remove.
         error = ctypes.get_last_error()
         if error != 1168:
             raise RuntimeError(f"The credentials could not be removed from Windows Credential Manager (error {error}).")
 
 
+def keychain_saved_credentials(service=KEYCHAIN_SERVICE):
+    """Read credentials for one Keychain service."""
+    result = subprocess.run(["security", "find-generic-password", "-s", service, "-g"], capture_output=True, text=True, timeout=3)
+    account = re.search(r'"acct"<blob>="([^"]*)"', result.stdout)
+    password = re.search(r'password: "(.*)"', result.stderr)
+    if result.returncode == 0 and account and password:
+        return account.group(1), password.group(1)
+    return "", ""
+
+
+def keychain_clear_credentials(service=KEYCHAIN_SERVICE):
+    """Remove credentials for one Keychain service."""
+    result = subprocess.run(["security", "delete-generic-password", "-s", service],
+                            capture_output=True, text=True, timeout=5)
+    if result.returncode != 0 and "could not be found" not in result.stderr.casefold():
+        raise RuntimeError(result.stderr.strip() or "The credentials could not be removed from Keychain.")
+
+
 def saved_credentials():
-    """Read the app's saved credentials from the platform's secure credential store."""
+    """Read current credentials, migrating the old app identity when needed."""
     if os.name == "nt":
-        try:
-            return windows_saved_credentials()
-        # A missing or unavailable credential must never prevent the app from opening.
-        except Exception:
-            return "", ""
-    if os.name != "posix" or not Path("/usr/bin/security").is_file():
+        read_credentials = windows_saved_credentials
+    elif os.name == "posix" and Path("/usr/bin/security").is_file():
+        read_credentials = keychain_saved_credentials
+    else:
         return "", ""
     try:
-        result = subprocess.run(["security", "find-generic-password", "-s", KEYCHAIN_SERVICE, "-g"], capture_output=True, text=True, timeout=3)
-        account = re.search(r'"acct"<blob>="([^"]*)"', result.stdout)
-        password = re.search(r'password: "(.*)"', result.stderr)
-        if result.returncode == 0 and account and password: return account.group(1), password.group(1)
-    # A missing, locked, or unavailable Keychain must never stop the app from
-    # opening; the user can still enter credentials manually.
-    except Exception: pass
-    return "", ""
+        credentials = read_credentials()
+        if credentials[0]:
+            return credentials
+        credentials = read_credentials(LEGACY_CREDENTIAL_SERVICE)
+        if credentials[0]:
+            try:
+                save_credentials(*credentials)
+            except Exception:
+                # Keep using the legacy entry when secure storage is unavailable.
+                pass
+        return credentials
+    except Exception:
+        # A missing, locked, or unavailable store must not prevent startup.
+        return "", ""
 
 
 def save_credentials(username, password):
     """Store one current set of credentials in the platform's secure credential store."""
     if os.name == "nt":
         windows_save_credentials(username, password)
+        try:
+            windows_clear_credentials(LEGACY_CREDENTIAL_SERVICE)
+        except Exception:
+            pass
         return
     if os.name != "posix" or not Path("/usr/bin/security").is_file():
         return
-    previous_username, _previous_password = saved_credentials()
+    previous_username, _previous_password = keychain_saved_credentials()
+    result = subprocess.run(["security", "add-generic-password", "-U", "-s", KEYCHAIN_SERVICE, "-a", username, "-w", password], capture_output=True, text=True, timeout=5)
+    if result.returncode != 0: raise RuntimeError(result.stderr.strip() or "The credentials could not be saved in Keychain.")
     if previous_username and previous_username != username:
         # Keychain identifies generic passwords by both service and account.
         # Remove the former account so later launches cannot retrieve stale
         # credentials when the username has changed.
         subprocess.run(["security", "delete-generic-password", "-s", KEYCHAIN_SERVICE, "-a", previous_username], capture_output=True, text=True, timeout=5)
-    result = subprocess.run(["security", "add-generic-password", "-U", "-s", KEYCHAIN_SERVICE, "-a", username, "-w", password], capture_output=True, text=True, timeout=5)
-    if result.returncode != 0: raise RuntimeError(result.stderr.strip() or "The credentials could not be saved in Keychain.")
+    try:
+        keychain_clear_credentials(LEGACY_CREDENTIAL_SERVICE)
+    except Exception:
+        # The new entry is saved; retry legacy cleanup on a future save.
+        pass
 
 
 def clear_credentials():
     """Remove the app's saved credentials from the platform's secure store."""
     if os.name == "nt":
-        windows_clear_credentials()
+        remove_credentials = windows_clear_credentials
+    elif os.name == "posix" and Path("/usr/bin/security").is_file():
+        remove_credentials = keychain_clear_credentials
+    else:
         return
-    if os.name != "posix" or not Path("/usr/bin/security").is_file():
-        return
-    result = subprocess.run(["security", "delete-generic-password", "-s", KEYCHAIN_SERVICE],
-                            capture_output=True, text=True, timeout=5)
-    # Keychain's "not found" failure is harmless; any other failure is useful to report.
-    if result.returncode != 0 and "could not be found" not in result.stderr.casefold():
-        raise RuntimeError(result.stderr.strip() or "The credentials could not be removed from Keychain.")
+    error = None
+    for service in (KEYCHAIN_SERVICE, LEGACY_CREDENTIAL_SERVICE):
+        try:
+            remove_credentials(service)
+        except Exception as failure:
+            error = error or failure
+    if error:
+        raise error
 

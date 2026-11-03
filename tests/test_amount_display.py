@@ -102,11 +102,11 @@ def test_windows_credentials_are_saved_to_credential_manager(monkeypatch):
 def test_windows_credentials_are_cleared_from_credential_manager(monkeypatch):
     cleared = []
     monkeypatch.setattr(app.os, "name", "nt")
-    monkeypatch.setattr(settings, "windows_clear_credentials", lambda: cleared.append(True))
+    monkeypatch.setattr(settings, "windows_clear_credentials", lambda target: cleared.append(target))
 
     settings.clear_credentials()
 
-    assert cleared == [True]
+    assert cleared == [settings.KEYCHAIN_SERVICE, settings.LEGACY_CREDENTIAL_SERVICE]
 
 
 def test_multi_selection_uses_control_on_windows_and_command_on_macos():

@@ -76,7 +76,7 @@ Most communication with Chemotion uses the built-in functions of [chemotionapi](
 
 Sample information is retrieved over HTTPS and held in memory while the app is open.
 
-With **Remember** enabled, your username and password are saved locally in macOS Keychain or Windows Credential Manager under `io.github.kenichi-endo.chemotion-inventorizer`.
+With **Remember** enabled, your username and password are saved locally in macOS Keychain or Windows Credential Manager under `io.github.kenichi-endo.chemotion-sample-manager`.
 
 Server and display preferences are saved separately in the current user's profile:
 
