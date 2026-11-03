@@ -611,11 +611,10 @@ class SampleManager(tk.Tk):
         self.text_filter.trace_add("write", self.save_filters)
         self.location_filter.trace_add("write", self.save_filters)
         ttk.Label(self.location_controls, text="Location:").pack(side="left", padx=(12, 0))
-        self.location_filter_menu = ttk.Combobox(self.location_controls, textvariable=self.location_filter,
-                                                values=("All locations",), state="readonly", width=18)
+        self.location_filter_menu = ttk.OptionMenu(self.location_controls, self.location_filter,
+                                                   self.location_filter.get(), "All locations",
+                                                   command=self.filter_by_location)
         self.location_filter_menu.pack(side="left", padx=4)
-        self.location_filter_menu.bind("<<ComboboxSelected>>", self.filter_by_location)
-        disable_combobox_scroll_selection(self.location_filter_menu)
         self.print_button = ttk.Button(self.location_controls, text="Print…", command=self.printable, state="disabled"); self.print_button.pack(side="left", padx=4)
         self.export_button = ttk.Button(self.location_controls, text="Export collection…", command=self.export_collection, state="disabled")
         self.export_button.pack(side="left", padx=4)
@@ -1153,7 +1152,7 @@ class SampleManager(tk.Tk):
         self.collection_selection_locked = busy
         self.loading_order_menu.configure(state="disabled" if busy else "normal")
         self.collection_menu.configure(state="normal" if self.collection_choices else "disabled")
-        self.location_filter_menu.configure(state="disabled" if busy else "readonly")
+        self.location_filter_menu.configure(state="disabled" if busy else "normal")
     def guard_collection_selection(self, event):
         if self.collection_selection_locked and event.keysym not in {"Tab", "ISO_Left_Tab", "Escape"}:
             return "break"
@@ -1209,7 +1208,7 @@ class SampleManager(tk.Tk):
         # Keep the selection even before its rows arrive, or if loading is stopped.
         if selected != "All locations" and selected not in locations:
             locations = tuple(sorted((*locations, selected), key=str.casefold))
-        choices = ("All locations", *locations); self.location_filter_menu.configure(values=choices)
+        choices = ("All locations", *locations); self.location_filter_menu.set_menu(None, *choices)
     def save_filters(self, *_args):
         self.profile_settings["text_filter"] = self.text_filter.get()
         self.profile_settings["location_filter"] = self.location_filter.get()

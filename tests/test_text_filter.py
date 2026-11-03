@@ -51,7 +51,7 @@ def test_saved_location_survives_partial_loading():
     view = SimpleNamespace(
         rows=[],
         location_filter=SimpleNamespace(get=lambda: "Shelf B"),
-        location_filter_menu=SimpleNamespace(configure=lambda **kwargs: menus.append(kwargs["values"])),
+        location_filter_menu=SimpleNamespace(set_menu=lambda default, *choices: menus.append(choices)),
     )
     SampleManager.update_location_filter(view)
     view.rows = [{"location": "Shelf A"}]
