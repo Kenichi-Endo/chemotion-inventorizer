@@ -1,7 +1,7 @@
 """Inventory row conversion, formatting, and column definitions."""
 import re
 from datetime import datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, localcontext
 from urllib.parse import quote
 from urllib.parse import urlsplit
 
@@ -152,15 +152,14 @@ def natural_sort_value(value):
 
 
 def format_amount(value):
-    """Format an amount exactly as supplied; never round it for display or print."""
+    """Suppress floating-point noise with nine significant display digits."""
     try:
         number = Decimal(str(value))
         if not number.is_finite(): return shown(value)
-        # ``.3g`` rounds values below one (for example 0.0025 can become
-        # 0.003).  Amount strings are also used by the PDF checklist, where a
-        # rounded-up quantity is unsafe.  Decimal's fixed-point normalized
-        # representation removes insignificant zeroes without changing value.
-        return format(number.normalize(), "f")
+        # Significant digits preserve small amounts without a fixed decimal cutoff.
+        with localcontext() as context:
+            context.prec = 9
+            return format(number.normalize(), "f")
     except (InvalidOperation, ValueError):
         return shown(value)
 

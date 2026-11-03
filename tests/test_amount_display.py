@@ -222,6 +222,20 @@ class _Response:
         return self.body
 
 
+@pytest.mark.parametrize("value, unit, expected", [
+    ("40.00000001", "mg", "40 mg"),
+    ("39.99999999", "mg", "40 mg"),
+    ("0.04000000001", "g", "40 mg"),
+    ("0.04000000001", "L", "40 mL"),
+    ("40.0001", "mg", "40.0001 mg"),
+    ("0.00000000168", "mL", "0.00000000168 mL"),
+])
+def test_amount_display_suppresses_float_noise(value, unit, expected):
+    row = inventory.inventory_row({"real_amount_value": value, "real_amount_unit": unit})
+    assert row["amount"] == expected
+    assert row["amount_value"] == value
+
+
 def test_small_millilitre_amount_is_not_converted_or_rounded():
     assert inventory.format_amount_with_unit("0.00168", "mL") == "0.00168 mL"
 
