@@ -25,7 +25,7 @@ jobs:
         run: brew install libmagic
       - run: python -m pip install -e ".[dev]"
       - if: runner.os == 'Windows'
-        run: python -c "import sys; from chemotion_inventorizer.bootstrap import ensure_libmagic; ensure_libmagic(sys.executable, sys.stdout)"
+        run: python -c "import sys; from chemotion_sample_manager.bootstrap import ensure_libmagic; ensure_libmagic(sys.executable, sys.stdout)"
       - run: python -m pytest -q
       - run: python -m compileall -q src tests
       - run: python -m build

@@ -15,7 +15,7 @@ import zipfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NAME = "Chemotion Inventorizer"
+NAME = "Chemotion Sample Manager"
 RESOURCES = ROOT / f"{NAME}.app" / "Contents" / "Resources"
 
 
@@ -34,7 +34,7 @@ def build():
         app_version = tomllib.load(stream)["project"]["version"]
     icon_dir = work / "assets"
     icon_dir.mkdir(exist_ok=True)
-    shutil.copy2(RESOURCES / "chemotion-inventorizer-icon.png", icon_dir / "icon.png")
+    shutil.copy2(RESOURCES / "chemotion-sample-manager-icon.png", icon_dir / "icon.png")
     command = [
         sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean",
         "--onedir" if sys.platform == "darwin" else "--onefile",
@@ -43,7 +43,7 @@ def build():
         "--specpath", str(work), "--paths", str(ROOT / "src"),
         "--collect-all", "resvg_py",
         "--copy-metadata", "chemotion-api",
-        "--add-data", f"{icon_dir / 'icon.png'}:chemotion_inventorizer/assets",
+        "--add-data", f"{icon_dir / 'icon.png'}:chemotion_sample_manager/assets",
         "--add-data", f"{ROOT / 'LICENSE'}:.",
     ]
     if sys.platform == "darwin":
@@ -55,14 +55,14 @@ def build():
             raise RuntimeError("Install libmagic with 'brew install libmagic' before building.")
         command.extend([
             "--add-binary", f"{magic_library}:.",
-            "--icon", str(RESOURCES / "ChemotionInventorizer.icns"),
-            "--osx-bundle-identifier", "io.github.kenichi-endo.chemotion-inventorizer",
+            "--icon", str(RESOURCES / "ChemotionSampleManager.icns"),
+            "--osx-bundle-identifier", "io.github.kenichi-endo.chemotion-sample-manager",
             "--target-arch", platform.machine(),
         ])
         # Universal Python otherwise starts native Apple Silicon subprocesses
         # even when this build was requested through Rosetta.
         command = ["arch", f"-{platform.machine()}", *command]
-    command.append(str(ROOT / "src" / "chemotion_inventorizer" / "standalone.py"))
+    command.append(str(ROOT / "src" / "chemotion_sample_manager" / "standalone.py"))
     subprocess.run(command, cwd=ROOT, check=True)
 
     if sys.platform == "darwin":
@@ -81,7 +81,7 @@ def build():
 
     # Run from an unrelated folder with source import overrides removed. A
     # successful check must come from the bundle, not the development checkout.
-    with tempfile.TemporaryDirectory(prefix="inventorizer-check-") as directory:
+    with tempfile.TemporaryDirectory(prefix="sample_manager-check-") as directory:
         report = Path(directory) / "self-test.json"
         checked_executable = executable
         if sys.platform == "win32":
@@ -105,7 +105,7 @@ def build():
             raise RuntimeError("Dependency check did not run in a frozen application.")
         print(json.dumps(result, indent=2))
 
-    archive = output / f"chemotion-inventorizer-{app_version}-{platform_name}.zip"
+    archive = output / f"chemotion-sample-manager-{app_version}-{platform_name}.zip"
     if sys.platform == "darwin":
         # ditto retains bundle symlinks and executable permissions in the ZIP.
         subprocess.run(["ditto", "-c", "-k", "--sequesterRsrc", "--keepParent",

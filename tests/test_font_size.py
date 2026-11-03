@@ -1,5 +1,5 @@
 """Check table font preferences without opening a GUI."""
-from chemotion_inventorizer import settings
+from chemotion_sample_manager import settings
 
 from types import SimpleNamespace
 
@@ -22,7 +22,7 @@ def test_font_size_changes_and_profile_round_trip(value, expected, monkeypatch, 
         table_row_height=lambda: 56,
         profile_settings={"visible_columns": ["label"]},
     )
-    app.Inventorizer.change_font_size(view)
+    app.SampleManager.change_font_size(view)
     if expected is None:
         assert sizes == styles == []
         assert not settings.PROFILE_SETTINGS_PATH.exists()
@@ -42,4 +42,4 @@ def test_row_height_fits_text_and_structures(structure, linespace, expected):
         column_visibility={"structure": SimpleNamespace(get=lambda: structure)},
         sample_list_font=SimpleNamespace(metrics=lambda name: linespace),
     )
-    assert app.Inventorizer.table_row_height(view) == expected
+    assert app.SampleManager.table_row_height(view) == expected

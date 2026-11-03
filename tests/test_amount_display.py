@@ -1,5 +1,5 @@
 """Regression tests for displaying Chemotion sample amounts."""
-from chemotion_inventorizer import client as api_client, inventory, settings
+from chemotion_sample_manager import client as api_client, inventory, settings
 
 from io import BytesIO
 import json
@@ -12,33 +12,33 @@ from chemotion_api.collection import Collection
 import pytest
 
 
-from chemotion_inventorizer import gui as app
+from chemotion_sample_manager import gui as app
 
 
 def test_created_column_is_optional_and_follows_last_modified():
     row = inventory.inventory_row({"created_at": "2026-09-09T08:30:00"})
-    index = app.Inventorizer.keys.index("last_modified") + 1
-    assert app.Inventorizer.keys[index] == "created"
-    assert app.Inventorizer.headings[index] == "Created"
-    assert app.Inventorizer.row_values(None, row)[index] == "2026-09-09 08:30:00"
+    index = app.SampleManager.keys.index("last_modified") + 1
+    assert app.SampleManager.keys[index] == "created"
+    assert app.SampleManager.headings[index] == "Created"
+    assert app.SampleManager.row_values(None, row)[index] == "2026-09-09 08:30:00"
     assert row["created_at"] == "2026-09-09T08:30:00"
     assert inventory.displayed_row_value(inventory.inventory_row({}), "created") == "—"
-    assert "created" not in app.Inventorizer.default_visible_columns
-    for order in (app.Inventorizer.column_menu_order, app.Inventorizer.default_column_order):
+    assert "created" not in app.SampleManager.default_visible_columns
+    for order in (app.SampleManager.column_menu_order, app.SampleManager.default_column_order):
         assert order[order.index("last_modified") + 1] == "created"
 
 
 def test_density_column_uses_sample_value_and_follows_molecule_name():
     row = inventory.inventory_row({"density": 0.789, "name": "Ethanol"})
-    index = app.Inventorizer.keys.index("molecule") + 1
-    assert app.Inventorizer.keys[index] == "density"
-    assert app.Inventorizer.headings[index] == "Density"
-    assert app.Inventorizer.row_values(None, row)[index] == "0.789"
+    index = app.SampleManager.keys.index("molecule") + 1
+    assert app.SampleManager.keys[index] == "density"
+    assert app.SampleManager.headings[index] == "Density"
+    assert app.SampleManager.row_values(None, row)[index] == "0.789"
     assert inventory.inventory_row({"density": 0})["density"] == "0"
     assert inventory.inventory_row({})["density"] == "—"
-    previous_order = tuple(key for key in app.Inventorizer.keys if key != "density")
-    assert settings.column_order(previous_order, app.Inventorizer.keys) == app.Inventorizer.keys
-    assert settings.visible_columns(previous_order, app.Inventorizer.keys) == previous_order
+    previous_order = tuple(key for key in app.SampleManager.keys if key != "density")
+    assert settings.column_order(previous_order, app.SampleManager.keys) == app.SampleManager.keys
+    assert settings.visible_columns(previous_order, app.SampleManager.keys) == previous_order
 
 
 @pytest.mark.parametrize("source, expected", [
@@ -78,8 +78,8 @@ def test_restricted_structure_uses_chemotion_placeholder_without_a_molecule_imag
 def test_undefined_density_displays_blank(value):
     row = inventory.inventory_row({"density": value})
     assert inventory.displayed_row_value(row, "density") == ""
-    index = app.Inventorizer.keys.index("density")
-    assert app.Inventorizer.row_values(None, row)[index] == ""
+    index = app.SampleManager.keys.index("density")
+    assert app.SampleManager.row_values(None, row)[index] == ""
 
 
 def test_windows_credentials_are_loaded_from_credential_manager(monkeypatch):

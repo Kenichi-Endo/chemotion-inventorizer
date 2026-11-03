@@ -5,16 +5,16 @@ import pytest
 import zipfile
 from types import SimpleNamespace
 
-from chemotion_inventorizer import standalone
+from chemotion_sample_manager import standalone
 
 
 @pytest.mark.parametrize("embedded", [False, True])
 def test_frozen_windows_check_accepts_embedded_tcl_tk_libraries(tmp_path, monkeypatch, embedded):
     # Load application dependencies before simulating Windows on another host.
-    from chemotion_inventorizer import gui
+    from chemotion_sample_manager import gui
     import tkinter
 
-    package = tmp_path / "chemotion_inventorizer"
+    package = tmp_path / "chemotion_sample_manager"
     assets = package / "assets"
     assets.mkdir(parents=True)
     (assets / "icon.png").touch()
@@ -31,7 +31,7 @@ def test_frozen_windows_check_accepts_embedded_tcl_tk_libraries(tmp_path, monkey
     monkeypatch.setattr(standalone.sys, "platform", "win32")
     monkeypatch.setattr(standalone.sys, "frozen", True, raising=False)
     monkeypatch.setattr(standalone.sys, "_MEIPASS", str(tmp_path), raising=False)
-    monkeypatch.setattr(standalone.chemotion_inventorizer, "__file__", str(package / "__init__.py"))
+    monkeypatch.setattr(standalone.chemotion_sample_manager, "__file__", str(package / "__init__.py"))
     monkeypatch.delenv("TCL_LIBRARY", raising=False)
     monkeypatch.delenv("TK_LIBRARY", raising=False)
     report = tmp_path / "self-test.json"
@@ -45,7 +45,7 @@ def test_frozen_windows_check_accepts_embedded_tcl_tk_libraries(tmp_path, monkey
 
 def test_self_test_failure_is_logged_without_windowed_exception_dialog(tmp_path, monkeypatch):
     report = tmp_path / "self-test.json"
-    monkeypatch.setattr(standalone.sys, "argv", ["inventorizer", "--self-test", str(report)])
+    monkeypatch.setattr(standalone.sys, "argv", ["sample_manager", "--self-test", str(report)])
 
     def fail(report_path):
         raise ImportError("missing bundled dependency")
@@ -60,7 +60,7 @@ def test_self_test_failure_is_logged_without_windowed_exception_dialog(tmp_path,
 
 def test_self_test_cli_checks_dependencies_without_launching_gui(tmp_path, monkeypatch):
     report = tmp_path / "bundle check.json"
-    monkeypatch.setattr(standalone.sys, "argv", ["inventorizer", "--self-test", str(report)])
+    monkeypatch.setattr(standalone.sys, "argv", ["sample_manager", "--self-test", str(report)])
 
     def unexpected_gui():
         raise AssertionError("The dependency check must not open the application.")
@@ -76,13 +76,13 @@ def test_self_test_cli_checks_dependencies_without_launching_gui(tmp_path, monke
 
 
 def test_frozen_entry_point_uses_package_icon(tmp_path, monkeypatch):
-    package = tmp_path / "chemotion_inventorizer"
+    package = tmp_path / "chemotion_sample_manager"
     assets = package / "assets"
     assets.mkdir(parents=True)
     icon = assets / "icon.png"
     icon.write_bytes(b"icon")
     monkeypatch.setattr(standalone, "__file__", str(tmp_path / "standalone.py"))
-    monkeypatch.setattr(standalone.chemotion_inventorizer, "__file__", str(package / "__init__.py"))
+    monkeypatch.setattr(standalone.chemotion_sample_manager, "__file__", str(package / "__init__.py"))
     monkeypatch.setattr(standalone.sys, "frozen", True, raising=False)
     for variable, filename in (("TCL_LIBRARY", "init.tcl"), ("TK_LIBRARY", "tk.tcl")):
         directory = tmp_path / variable
@@ -94,10 +94,10 @@ def test_frozen_entry_point_uses_package_icon(tmp_path, monkeypatch):
     standalone.self_test(report)
     assert json.loads(report.read_text())["frozen"] is True
 
-    monkeypatch.setattr(standalone.sys, "argv", ["inventorizer"])
-    monkeypatch.delenv("CHEMOTION_INVENTORIZER_ICON", raising=False)
+    monkeypatch.setattr(standalone.sys, "argv", ["sample_manager"])
+    monkeypatch.delenv("CHEMOTION_SAMPLE_MANAGER_ICON", raising=False)
     launched = []
     monkeypatch.setattr(standalone, "launch_app", lambda: launched.append(True))
     standalone.main()
-    assert standalone.os.environ["CHEMOTION_INVENTORIZER_ICON"] == str(icon)
+    assert standalone.os.environ["CHEMOTION_SAMPLE_MANAGER_ICON"] == str(icon)
     assert launched == [True]

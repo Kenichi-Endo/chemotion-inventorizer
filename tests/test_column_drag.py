@@ -30,10 +30,10 @@ def test_heading_click_and_drag(path, expected_sorts, expected_order, monkeypatc
     )
     view.visible_column_keys = lambda: view.column_order
     events = [SimpleNamespace(x=x, y=10) for x in path]
-    app.Inventorizer.begin_column_drag(view, events[0])
+    app.SampleManager.begin_column_drag(view, events[0])
     for event in events[1:]:
-        app.Inventorizer.move_column_drag(view, event)
-    assert app.Inventorizer.finish_column_drag(view, events[-1]) == "break"
+        app.SampleManager.move_column_drag(view, event)
+    assert app.SampleManager.finish_column_drag(view, events[-1]) == "break"
     assert sorts == expected_sorts
     assert view.column_order == expected_order
     assert bool(saved) == (expected_order != ("label", "location"))
@@ -88,12 +88,12 @@ def test_double_clicking_a_header_separator_fits_heading_and_values(monkeypatch)
         style=SimpleNamespace(lookup=lambda style, option: ""),
         displayed_data_column_keys=lambda: ("label", "location"),
         displayed_column_key=lambda event: "location",
-        column_min_widths=app.Inventorizer.column_min_widths,
+        column_min_widths=app.SampleManager.column_min_widths,
         remember_column_widths=lambda: None,
     )
     event = SimpleNamespace(x=150, y=10)
 
-    assert app.Inventorizer.auto_size_column(view, event) == "break"
+    assert app.SampleManager.auto_size_column(view, event) == "break"
     assert widths == [("location", len("Long location name") * 10 + 24)]
 
 
@@ -104,7 +104,7 @@ def test_double_clicking_outside_a_header_separator_does_not_resize():
     )
     view = SimpleNamespace(tree=tree)
 
-    assert app.Inventorizer.auto_size_column(view, SimpleNamespace(x=10, y=10)) is None
+    assert app.SampleManager.auto_size_column(view, SimpleNamespace(x=10, y=10)) is None
 
 
 def test_widths_round_trip_in_profile_including_hidden_columns(monkeypatch):
@@ -122,12 +122,12 @@ def test_widths_round_trip_in_profile_including_hidden_columns(monkeypatch):
         tree=SimpleNamespace(column=column),
         visible_column_keys=lambda: ("structure", "label"),
         column_visibility={"structure": SimpleNamespace(get=lambda: True)},
-        column_min_widths=app.Inventorizer.column_min_widths,
+        column_min_widths=app.SampleManager.column_min_widths,
     )
-    app.Inventorizer.remember_column_widths(view)
+    app.SampleManager.remember_column_widths(view)
     assert saved[0]["column_widths"] == {"structure": 140, "label": 180, "location": 310}
     widths.update({"#0": 85, "label": 120, "location": 260})
-    app.Inventorizer.restore_column_widths(view)
+    app.SampleManager.restore_column_widths(view)
     assert widths == {"#0": 140, "label": 180, "location": 310}
 
 
@@ -135,5 +135,5 @@ def test_separator_release_saves_after_native_resize():
     callbacks = []
     view = SimpleNamespace(resizing_column=True, after_idle=callbacks.append,
                            remember_column_widths=lambda: None)
-    assert app.Inventorizer.finish_column_drag(view, SimpleNamespace()) is None
+    assert app.SampleManager.finish_column_drag(view, SimpleNamespace()) is None
     assert callbacks == [view.remember_column_widths]

@@ -1,5 +1,5 @@
 """Collection export notification matching and safe archive saving."""
-from chemotion_inventorizer import client as api_client
+from chemotion_sample_manager import client as api_client
 import io
 import json
 import zipfile

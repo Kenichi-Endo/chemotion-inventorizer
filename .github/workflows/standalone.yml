@@ -7,7 +7,7 @@ on:
       - 'src/**'
       - 'scripts/build_standalone.py'
       - 'pyproject.toml'
-      - 'Chemotion Inventorizer.app/Contents/Resources/**'
+      - 'Chemotion Sample Manager.app/Contents/Resources/**'
       - '.github/workflows/standalone.yml'
 
 permissions:
@@ -39,7 +39,7 @@ jobs:
         run: brew install libmagic
       - run: python -m pip install -e ".[dev,standalone]"
       - if: runner.os == 'Windows'
-        run: python -c "import sys; from chemotion_inventorizer.bootstrap import ensure_libmagic; ensure_libmagic(sys.executable, sys.stdout)"
+        run: python -c "import sys; from chemotion_sample_manager.bootstrap import ensure_libmagic; ensure_libmagic(sys.executable, sys.stdout)"
       - run: >-
           python -u -c "import faulthandler, pytest;
           faulthandler.dump_traceback_later(60, exit=True);
@@ -48,6 +48,6 @@ jobs:
       - run: python scripts/build_standalone.py
       - uses: actions/upload-artifact@v4
         with:
-          name: chemotion-inventorizer-${{ matrix.artifact }}
+          name: chemotion-sample-manager-${{ matrix.artifact }}
           path: dist/standalone/*.zip
           if-no-files-found: error

@@ -3,8 +3,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from chemotion_inventorizer.gui import Inventorizer
-from chemotion_inventorizer import settings
+from chemotion_sample_manager.gui import SampleManager
+from chemotion_sample_manager import settings
 
 
 @pytest.mark.parametrize("pattern, columns, location, expected", [
@@ -29,7 +29,7 @@ def test_regex_filter(pattern, columns, location, expected):
         visible_column_keys=lambda: columns,
         row_values=lambda row: (row["sample"], row["vendor"]),
     )
-    assert [row["id"] for row in Inventorizer.filtered_rows(view)] == expected
+    assert [row["id"] for row in SampleManager.filtered_rows(view)] == expected
 
 
 @pytest.mark.parametrize("pattern, location", [("^eth.*ol$", "Shelf B"), ("", "All locations")])
@@ -40,7 +40,7 @@ def test_filters_profile_round_trip(pattern, location, monkeypatch, tmp_path):
         text_filter=SimpleNamespace(get=lambda: pattern),
         location_filter=SimpleNamespace(get=lambda: location),
     )
-    Inventorizer.save_filters(view)
+    SampleManager.save_filters(view)
     assert settings.saved_profile_settings() == {
         "table_font_size": 18, "text_filter": pattern, "location_filter": location,
     }
@@ -53,11 +53,11 @@ def test_saved_location_survives_partial_loading():
         location_filter=SimpleNamespace(get=lambda: "Shelf B"),
         location_filter_menu=SimpleNamespace(configure=lambda **kwargs: menus.append(kwargs["values"])),
     )
-    Inventorizer.update_location_filter(view)
+    SampleManager.update_location_filter(view)
     view.rows = [{"location": "Shelf A"}]
-    Inventorizer.update_location_filter(view)
+    SampleManager.update_location_filter(view)
     view.rows.append({"location": "Shelf B"})
-    Inventorizer.update_location_filter(view)
+    SampleManager.update_location_filter(view)
     assert menus == [
         ("All locations", "Shelf B"),
         ("All locations", "Shelf A", "Shelf B"),

@@ -17,6 +17,7 @@ venv/
 .env
 .env.*
 !.env.example
+chemotion-sample-manager-launch.log
 chemotion-inventorizer-launch.log
 INTERNAL_MACOS_DISTRIBUTION.md
 

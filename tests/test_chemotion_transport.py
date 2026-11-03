@@ -10,7 +10,7 @@ import pytest
 from requests import Response
 from requests.exceptions import Timeout
 
-from chemotion_inventorizer import client as api_client
+from chemotion_sample_manager import client as api_client
 
 
 @pytest.fixture(autouse=True)

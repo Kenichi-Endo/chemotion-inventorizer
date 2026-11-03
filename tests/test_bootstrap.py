@@ -9,8 +9,8 @@ from types import SimpleNamespace
 import pytest
 
 
-SOURCE = Path(__file__).resolve().parents[1] / "src" / "chemotion_inventorizer" / "bootstrap.py"
-SPEC = importlib.util.spec_from_file_location("inventorizer_bootstrap", SOURCE)
+SOURCE = Path(__file__).resolve().parents[1] / "src" / "chemotion_sample_manager" / "bootstrap.py"
+SPEC = importlib.util.spec_from_file_location("sample_manager_bootstrap", SOURCE)
 bootstrap = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(bootstrap)
 
@@ -112,13 +112,13 @@ def test_launcher_runs_package_module(tmp_path, monkeypatch, platform_name, wind
 
     assert bootstrap.main(["example argument"]) == 0
     executable = python.with_name("pythonw.exe") if windowless else python
-    assert commands[0][0] == [str(executable), "-m", "chemotion_inventorizer", "example argument"]
+    assert commands[0][0] == [str(executable), "-m", "chemotion_sample_manager", "example argument"]
     assert commands[0][1]["cwd"] == SOURCE.parents[2]
 
 
 @pytest.mark.skipif(bootstrap.sys.platform == "win32", reason="Requires a POSIX shell")
 def test_macos_wrapper_accepts_current_source_layout():
-    launcher = SOURCE.parents[2] / "Chemotion Inventorizer.app" / "Contents" / "MacOS" / "Chemotion Inventorizer"
+    launcher = SOURCE.parents[2] / "Chemotion Sample Manager.app" / "Contents" / "MacOS" / "Chemotion Sample Manager"
     # Run the wrapper's source checks, stopping before environment setup or GUI launch.
     preflight = launcher.read_text().split("\nexport ", 1)[0]
     result = subprocess.run(["/bin/sh", "-c", preflight, str(launcher)],

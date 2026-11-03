@@ -1,5 +1,5 @@
 """Check edit refreshes and partial failures without opening the application."""
-from chemotion_inventorizer import client as api_client, inventory
+from chemotion_sample_manager import client as api_client, inventory
 
 from types import SimpleNamespace
 
@@ -51,16 +51,16 @@ def test_selection_extended_during_edit_updates_commit_targets(state, expected_i
         cancel_amount_edit=lambda: None,
         _save_vendor=lambda targets, value: saved.append((targets, value)),
     )
-    viewer.remember_selection = lambda: app.Inventorizer.remember_selection(viewer)
+    viewer.remember_selection = lambda: app.SampleManager.remember_selection(viewer)
 
-    app.Inventorizer.extend_edit_selection(viewer, SimpleNamespace(y=10, state=state))
-    app.Inventorizer.finish_vendor_edit(viewer, rows[0], advance=True)
+    app.SampleManager.extend_edit_selection(viewer, SimpleNamespace(y=10, state=state))
+    app.SampleManager.finish_vendor_edit(viewer, rows[0], advance=True)
 
     assert saved == [([rows[number - 1] for number in expected_ids], "New vendor")]
 
 
 def test_mixture_molecule_cell_does_not_create_editor():
-    assert app.Inventorizer.edit_name(SimpleNamespace(), {"sample_type": "Mixture"}, "1", "molecule") == "break"
+    assert app.SampleManager.edit_name(SimpleNamespace(), {"sample_type": "Mixture"}, "1", "molecule") == "break"
 
 
 def test_bulk_molecule_edit_excludes_mixtures():
@@ -69,9 +69,9 @@ def test_bulk_molecule_edit_excludes_mixtures():
                              _change_molecule_name=object())
     regular = {"id": 1, "molecule_id": 2}
     mixture = {"id": 3, "sample_type": "Mixture"}
-    app.Inventorizer._save_molecule_name(viewer, [regular, mixture], "New name")
+    app.SampleManager._save_molecule_name(viewer, [regular, mixture], "New name")
     assert calls[0][0] == [regular]
-    app.Inventorizer._save_molecule_name(viewer, [mixture], "New name")
+    app.SampleManager._save_molecule_name(viewer, [mixture], "New name")
     assert len(calls) == 1
 
 
@@ -87,7 +87,7 @@ def test_printing_uses_location_filtered_samples(monkeypatch):
         choose_print_layout=lambda: {"columns": ["label"]}, profile_settings={},
         status=SimpleNamespace(configure=lambda **kwargs: None), colors={"muted": "gray"},
     )
-    app.Inventorizer.printable(viewer)
+    app.SampleManager.printable(viewer)
     assert printed == [{"id": 1}]
 
 
@@ -102,11 +102,11 @@ def test_location_filter_deselects_hidden_samples_without_restoring_them():
         column_visibility={"structure": SimpleNamespace(get=lambda: False)},
         status=SimpleNamespace(configure=lambda **kwargs: None), colors={"muted": "gray"},
     )
-    app.Inventorizer.filter_by_location(viewer)
+    app.SampleManager.filter_by_location(viewer)
     assert selection == viewer.selected_row_ids == {"1"}
     assert not viewer.location_filter_retained_row_ids
     visible.append({"id": 2})
-    app.Inventorizer.filter_by_location(viewer)
+    app.SampleManager.filter_by_location(viewer)
     assert selection == viewer.selected_row_ids == {"1"}
 
 
@@ -131,7 +131,7 @@ def test_opened_sample_refresh_fetches_current_record(monkeypatch, failure):
         after=lambda *args: calls.append(args),
         _entry_refreshed=object(), _opened_sample_refresh_failed=object(),
     )
-    app.Inventorizer._refresh_opened_sample(viewer, row)
+    app.SampleManager._refresh_opened_sample(viewer, row)
     assert calls[:2] == ["login", (2, 7, True)]
     if failure:
         assert calls[2] == (0, viewer._opened_sample_refresh_failed, "Unavailable")
@@ -159,8 +159,8 @@ def test_commit_navigation_uses_visible_row_and_column_order(item_id, field, dir
             return ("vendor", "label", "sample")
 
     viewer = SimpleNamespace(tree=Tree())
-    viewer.next_visible_item = lambda item: app.Inventorizer.next_visible_item(viewer, item)
-    app.Inventorizer.queue_next_edit(viewer, item_id, field, direction)
+    viewer.next_visible_item = lambda item: app.SampleManager.next_visible_item(viewer, item)
+    app.SampleManager.queue_next_edit(viewer, item_id, field, direction)
     assert viewer.edit_after_save == expected
 
 
@@ -171,7 +171,7 @@ def test_navigation_commits_through_field_validation(field):
     viewer = SimpleNamespace(rows=[row], editing_cell=("2", field))
     for name in ("amount", "vendor", "location", "name"):
         setattr(viewer, f"finish_{name}_edit", lambda *args, **kwargs: committed.append((args, kwargs)))
-    app.Inventorizer.commit_editor_navigation(viewer, "2", "left")
+    app.SampleManager.commit_editor_navigation(viewer, "2", "left")
     args = (row,) if field in {"amount", "vendor", "location"} else (row, field)
     assert committed == [(args, {"advance": "left"})]
 
@@ -185,7 +185,7 @@ def test_density_commit_normalizes_value(value, expected):
         cancel_amount_edit=lambda: None, _change_density=object(),
         _start_sample_edit=lambda *args: saved.append(args),
     )
-    app.Inventorizer.finish_name_edit(viewer, rows[0], "density")
+    app.SampleManager.finish_name_edit(viewer, rows[0], "density")
     assert saved == [(rows, "density", viewer._change_density, expected)]
 
 
@@ -198,7 +198,7 @@ def test_density_commit_rejects_invalid_values(value):
         status=SimpleNamespace(configure=lambda **kwargs: messages.append(kwargs)),
         colors={"error": "red"},
     )
-    assert app.Inventorizer.finish_name_edit(viewer, {}, "density") == "break"
+    assert app.SampleManager.finish_name_edit(viewer, {}, "density") == "break"
     assert messages
 
 
@@ -243,7 +243,7 @@ def test_sample_name_batch_preserves_rows_and_continues_after_failure(monkeypatc
         _progress=object(), _batch_edit_finished=object(), _name_change_failed=object(),
     )
 
-    app.Inventorizer._change_sample_name(viewer, rows, "Renamed")
+    app.SampleManager._change_sample_name(viewer, rows, "Renamed")
 
     assert requests == [(1, 42, True), (2, 42, True)]
     assert [args[0] for args in edits] == [1, 2]
@@ -289,7 +289,7 @@ def test_location_cell_edit_targets_selected_visible_rows(clicked_id, expected_i
         edit_location=lambda row, item_id: opened.append((row, item_id)),
     )
 
-    app.Inventorizer.edit_amount(viewer, SimpleNamespace(y=10))
+    app.SampleManager.edit_amount(viewer, SimpleNamespace(y=10))
 
     assert [row["id"] for row in viewer.editing_rows] == expected_ids
     assert opened == [(rows[clicked_id - 1], str(clicked_id))]
@@ -328,9 +328,9 @@ def test_location_cell_commit_updates_selection_and_preserves_flags(monkeypatch)
         viewer.editing_rows = []
 
     viewer.cancel_amount_edit = cancel_edit
-    viewer._change_locations = lambda *args: app.Inventorizer._change_locations(viewer, *args)
+    viewer._change_locations = lambda *args: app.SampleManager._change_locations(viewer, *args)
 
-    assert app.Inventorizer.finish_location_edit(viewer, rows[0], advance=True) == "break"
+    assert app.SampleManager.finish_location_edit(viewer, rows[0], advance=True) == "break"
 
     assert updates == [
         (1, "New", {"id": 1}, True, False),

@@ -15,7 +15,7 @@ SPEC.loader.exec_module(builder)
 def test_windows_archive_contains_only_executable_and_checks_it_in_isolation(tmp_path, monkeypatch):
     resources = tmp_path / "resources"
     resources.mkdir()
-    (resources / "chemotion-inventorizer-icon.png").write_bytes(b"icon")
+    (resources / "chemotion-sample-manager-icon.png").write_bytes(b"icon")
     commands = []
 
     def run(command, **kwargs):
@@ -46,7 +46,7 @@ def test_windows_archive_contains_only_executable_and_checks_it_in_isolation(tmp
     builder.build()
 
     assert len(commands) == 2
-    archive = tmp_path / "dist" / "standalone" / "chemotion-inventorizer-0.1.1-windows-x64.zip"
+    archive = tmp_path / "dist" / "standalone" / "chemotion-sample-manager-0.1.1-windows-x64.zip"
     with zipfile.ZipFile(archive) as zipped:
         assert zipped.namelist() == [f"{builder.NAME}.exe"]
         assert zipped.read(f"{builder.NAME}.exe") == b"fake executable"

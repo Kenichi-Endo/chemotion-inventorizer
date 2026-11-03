@@ -50,9 +50,9 @@ def test_switching_theme_reuses_images_and_keeps_stopped_rows():
                              item=lambda item, **kwargs: assigned.append(kwargs["image"])),
     )
 
-    app.Inventorizer.refresh_structure_appearance(viewer)
+    app.SampleManager.refresh_structure_appearance(viewer)
     viewer.dark_mode = False
-    app.Inventorizer.refresh_structure_appearance(viewer)
+    app.SampleManager.refresh_structure_appearance(viewer)
 
     assert assigned == [inverted, normal]
     assert viewer.rows is rows
@@ -73,7 +73,7 @@ def test_structure_size_updates_cached_images_and_profile(value, expected, monke
         table_row_height=lambda: 106,
         _structure_image_loaded=lambda *args: rendered.append(args), profile_settings={},
     )
-    app.Inventorizer.change_structure_size(viewer)
+    app.SampleManager.change_structure_size(viewer)
     assert viewer.structure_size == (expected or 50)
     assert saved == ([{"structure_size": expected}] if expected else [])
     assert rendered == ([("molecule.svg", b"svg")] if expected else [])
@@ -91,7 +91,7 @@ def test_resizing_renders_cached_svg_at_current_size(monkeypatch):
         _structure_image_finished=lambda source: None,
         _structure_image_failed=lambda *args: pytest.fail(str(args)),
     )
-    app.Inventorizer._structure_image_loaded(viewer, "source", b"ignored")
+    app.SampleManager._structure_image_loaded(viewer, "source", b"ignored")
     png = app.base64.b64decode(images[0]["data"])
     assert int.from_bytes(png[16:20], "big") == 150
     assert int.from_bytes(png[20:24], "big") == 100

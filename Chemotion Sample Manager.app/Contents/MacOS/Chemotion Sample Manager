@@ -4,16 +4,16 @@
 # from this launcher instead of copying the Python source into the bundle.
 launcher_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P) || exit 1
 project_dir=$(CDPATH= cd -- "$launcher_dir/../../.." && pwd -P) || exit 1
-source="$project_dir/src/chemotion_inventorizer/__main__.py"
-bootstrap="$project_dir/src/chemotion_inventorizer/bootstrap.py"
-icon="$project_dir/Chemotion Inventorizer.app/Contents/Resources/chemotion-inventorizer-icon.png"
+source="$project_dir/src/chemotion_sample_manager/__main__.py"
+bootstrap="$project_dir/src/chemotion_sample_manager/bootstrap.py"
+icon="$project_dir/Chemotion Sample Manager.app/Contents/Resources/chemotion-sample-manager-icon.png"
 
 if [ ! -r "$source" ] || [ ! -r "$bootstrap" ]; then
-    printf '%s\n' 'Chemotion Inventorizer source was not found. Keep the app inside the project folder.' >&2
+    printf '%s\n' 'Chemotion Sample Manager source was not found. Keep the app inside the project folder.' >&2
     exit 1
 fi
 
-export CHEMOTION_INVENTORIZER_ICON="$icon"
+export CHEMOTION_SAMPLE_MANAGER_ICON="$icon"
 export PYTHONDONTWRITEBYTECODE=1
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
@@ -26,12 +26,12 @@ else
 fi
 
 if [ -z "$python" ]; then
-    printf '%s\n' 'Python 3.14 was not found. Install Python 3.14 to run Chemotion Inventorizer.' >&2
+    printf '%s\n' 'Python 3.14 was not found. Install Python 3.14 to run Chemotion Sample Manager.' >&2
     exit 1
 fi
 
 # The bootstrap installs project dependencies into a private environment.
-log_dir="$HOME/Library/Logs/Chemotion Inventorizer"
+log_dir="$HOME/Library/Logs/Chemotion Sample Manager"
 mkdir -p "$log_dir" || exit 1
 log_file="$log_dir/launcher.log"
 exec "$python" "$bootstrap" "$@" >>"$log_file" 2>&1

@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from chemotion_inventorizer import gui as app
+from chemotion_sample_manager import gui as app
 
 
 @pytest.mark.parametrize("failure,locked", [(False, False), (True, False), (False, True)])
@@ -23,7 +23,7 @@ def test_removal_attempts_every_loaded_collection(monkeypatch, failure, locked):
         after=lambda delay, callback, *args: callback(*args),
         _sample_removed_from_collection=lambda *args: completed.append(args),
         _sample_removal_failed=errors.append)
-    app.Inventorizer._remove_sample_from_collection(viewer, row, [
+    app.SampleManager._remove_sample_from_collection(viewer, row, [
         {"id": 1, "label": "First"}, {"id": 2, "_synchronized": True, "_source_collection_id": 3}])
     assert calls == [(1, 7, False, None), (2, 7, True, 3)]
     if failure:
@@ -47,7 +47,7 @@ def test_delete_uses_loaded_collections_and_confirmation(monkeypatch):
         print_button=SimpleNamespace(configure=lambda **kwargs: None), show_progress=lambda: None,
         status=SimpleNamespace(configure=lambda **kwargs: None), colors={"accent": "blue"},
         _remove_sample_from_collection=lambda *args: None)
-    assert app.Inventorizer.delete_selected_row(viewer) == "break"
+    assert app.SampleManager.delete_selected_row(viewer) == "break"
     assert "all 2 loaded collections" in prompts[0]
     assert workers[0]["args"] == (row, loaded)
     assert workers[0]["args"][1] is not loaded
@@ -62,5 +62,5 @@ def test_row_is_removed_only_when_no_loaded_collection_keeps_it(locked):
         render_rows=lambda **kwargs: None,
         print_button=SimpleNamespace(configure=lambda **kwargs: None),
         status=SimpleNamespace(configure=lambda **kwargs: None), colors={"error": "red", "muted": "gray"})
-    app.Inventorizer._sample_removed_from_collection(viewer, row, locked)
+    app.SampleManager._sample_removed_from_collection(viewer, row, locked)
     assert viewer.rows == ([row] if locked else [])

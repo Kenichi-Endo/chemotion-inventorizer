@@ -2,11 +2,11 @@
 setlocal EnableExtensions DisableDelayedExpansion
 
 set "PROJECT_DIR=%~dp0"
-set "BOOTSTRAP=%PROJECT_DIR%src\chemotion_inventorizer\bootstrap.py"
+set "BOOTSTRAP=%PROJECT_DIR%src\chemotion_sample_manager\bootstrap.py"
 set "PYTHONDONTWRITEBYTECODE=1"
 
 if not exist "%BOOTSTRAP%" (
-    echo Chemotion Inventorizer source was not found. Keep this launcher in the project folder.
+    echo Chemotion Sample Manager source was not found. Keep this launcher in the project folder.
     goto :launch_failed
 )
 
@@ -32,8 +32,8 @@ echo Select "Add python.exe to PATH" and keep "tcl/tk and IDLE" selected.
 
 :launch_failed
 echo.
-echo Chemotion Inventorizer could not start. Review the message above.
+echo Chemotion Sample Manager could not start. Review the message above.
 echo Setup and launch errors are recorded in the current user's
-echo LocalAppData\Chemotion Inventorizer\Logs\launcher.log.
+echo LocalAppData\Chemotion Sample Manager\Logs\launcher.log.
 pause
 exit /b 1

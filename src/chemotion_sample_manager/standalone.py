@@ -9,11 +9,11 @@ import sys
 import traceback
 import zipfile
 
-import chemotion_inventorizer
+import chemotion_sample_manager
 
 
 def launch_app():
-    from chemotion_inventorizer.__main__ import main
+    from chemotion_sample_manager.__main__ import main
     main()
 
 
@@ -32,8 +32,8 @@ def embedded_tk_library(bundle):
 def self_test(report_path):
     # Import application dependencies inside the diagnostic handler so a
     # windowed executable reports startup errors without an invisible dialog.
-    from chemotion_inventorizer import gui
-    from chemotion_inventorizer.client import ChemotionClient
+    from chemotion_sample_manager import gui
+    from chemotion_sample_manager.client import ChemotionClient
     import resvg_py
     import tkinter
 
@@ -58,7 +58,7 @@ def self_test(report_path):
                     and embedded_tk_library(Path(sys._MEIPASS))):
                 continue
             raise RuntimeError(f"The bundle is missing {filename}.")
-        if not (Path(chemotion_inventorizer.__file__).resolve().parent / "assets" / "icon.png").is_file():
+        if not (Path(chemotion_sample_manager.__file__).resolve().parent / "assets" / "icon.png").is_file():
             raise RuntimeError("The bundle is missing the application icon.")
     ChemotionClient()
     Path(report_path).write_text(json.dumps({
@@ -85,9 +85,9 @@ def main():
             finally:
                 faulthandler.cancel_dump_traceback_later()
         return
-    icon = Path(chemotion_inventorizer.__file__).resolve().parent / "assets" / "icon.png"
+    icon = Path(chemotion_sample_manager.__file__).resolve().parent / "assets" / "icon.png"
     if icon.is_file():
-        os.environ["CHEMOTION_INVENTORIZER_ICON"] = str(icon)
+        os.environ["CHEMOTION_SAMPLE_MANAGER_ICON"] = str(icon)
     launch_app()
 
 

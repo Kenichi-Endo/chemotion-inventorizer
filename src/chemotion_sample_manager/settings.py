@@ -10,6 +10,7 @@ from .inventory import (
 )
 
 
+# Retain the secure-storage identity so existing installations stay signed in.
 KEYCHAIN_SERVICE = "io.github.kenichi-endo.chemotion-inventorizer"
 WINDOWS_CREDENTIAL_TARGET = KEYCHAIN_SERVICE
 
@@ -19,18 +20,22 @@ def profile_settings_path():
     if os.name == "nt":
         app_data = os.environ.get("APPDATA")
         if app_data:
-            return Path(app_data) / "Chemotion Inventorizer" / "settings.json"
-        return Path.home() / "AppData" / "Roaming" / "Chemotion Inventorizer" / "settings.json"
-    return Path.home() / "Library" / "Application Support" / "Chemotion Inventorizer" / "settings.json"
+            return Path(app_data) / "Chemotion Sample Manager" / "settings.json"
+        return Path.home() / "AppData" / "Roaming" / "Chemotion Sample Manager" / "settings.json"
+    return Path.home() / "Library" / "Application Support" / "Chemotion Sample Manager" / "settings.json"
 
 
 PROFILE_SETTINGS_PATH = profile_settings_path()
+LEGACY_PROFILE_SETTINGS_PATH = PROFILE_SETTINGS_PATH.parent.with_name("Chemotion Inventorizer") / "settings.json"
 
 
 def saved_profile_settings():
     """Read display preferences saved for the signed-in Mac user."""
     try:
-        with PROFILE_SETTINGS_PATH.open(encoding="utf-8") as settings_file:
+        path = PROFILE_SETTINGS_PATH
+        if not path.exists():
+            path = LEGACY_PROFILE_SETTINGS_PATH
+        with path.open(encoding="utf-8") as settings_file:
             settings = json.load(settings_file)
         return settings if isinstance(settings, dict) else {}
     except (OSError, ValueError, json.JSONDecodeError):

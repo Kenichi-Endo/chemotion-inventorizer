@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from chemotion_inventorizer.gui import TableScrollAnimation, enable_table_smooth_scrolling
+from chemotion_sample_manager.gui import TableScrollAnimation, enable_table_smooth_scrolling
 
 
 def drain(callbacks):

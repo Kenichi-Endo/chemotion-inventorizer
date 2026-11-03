@@ -24,7 +24,7 @@ def test_large_screen_preserves_previous_minimum():
 def test_macos_maximizes_on_positioned_display(monkeypatch):
     monkeypatch.setattr(app.sys, "platform", "darwin")
     window = SimpleNamespace(attributes=Mock(), state=Mock())
-    app.Inventorizer.maximize_window(window)
+    app.SampleManager.maximize_window(window)
     window.attributes.assert_called_once_with("-zoomed", True)
     window.state.assert_not_called()
 
@@ -35,5 +35,5 @@ def test_maximize_fallback_preserves_launch_display(monkeypatch):
         attributes=Mock(side_effect=app.tk.TclError()),
         geometry=Mock(), _startup_geometry="1920x1030+-1920+25",
     )
-    app.Inventorizer.maximize_window(window)
+    app.SampleManager.maximize_window(window)
     window.geometry.assert_called_once_with(window._startup_geometry)

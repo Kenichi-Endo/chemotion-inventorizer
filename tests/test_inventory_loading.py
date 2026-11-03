@@ -1,5 +1,5 @@
 """Collection retrieval order and partial-result stopping, without opening a GUI."""
-from chemotion_inventorizer import client as api_client
+from chemotion_sample_manager import client as api_client
 import json
 from collections import deque
 from pathlib import Path
@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 from requests import Response
 
-from chemotion_inventorizer import gui as app
+from chemotion_sample_manager import gui as app
 
 
 def mock_sample_list(monkeypatch, numbers):
@@ -153,7 +153,7 @@ def test_sample_list_status_shows_collection_name(monkeypatch):
 
 
 def test_loading_status_shows_escape_stop_hint():
-    viewer = app.Inventorizer.__new__(app.Inventorizer)
+    viewer = app.SampleManager.__new__(app.SampleManager)
     updates = []
     viewer.inventory_cancel_event = None
     viewer.colors = {"accent": "accent"}
@@ -174,7 +174,7 @@ def test_escape_cancels_edit_without_stopping_inventory_loading():
         editing_cell=("10", "sample"), editing_rows=[{"id": 10}],
     )
 
-    assert app.Inventorizer.cancel_amount_edit(viewer) == "break"
+    assert app.SampleManager.cancel_amount_edit(viewer) == "break"
     assert destroyed == [True]
     assert viewer.amount_editor is None
     assert viewer.editing_cell is None
@@ -243,12 +243,12 @@ def test_table_updates_during_loading_and_ignores_old_loads():
         render_rows=lambda: updates.append("table"),
         load_structure_images=lambda rows: updates.append(("structures", rows)),
     )
-    app.Inventorizer._rows_loaded(viewer, [{"id": 10}], current)
+    app.SampleManager._rows_loaded(viewer, [{"id": 10}], current)
     assert viewer.rows == [{"id": 10}]
     assert updates == ["locations", "table", ("structures", [{"id": 10}])]
-    app.Inventorizer._rows_loaded(viewer, [{"id": 2}], threading.Event())
+    app.SampleManager._rows_loaded(viewer, [{"id": 2}], threading.Event())
     viewer.inventory_loading = False
-    app.Inventorizer._rows_loaded(viewer, [{"id": 1}], current)
+    app.SampleManager._rows_loaded(viewer, [{"id": 1}], current)
     assert viewer.rows == [{"id": 10}]
 
 
@@ -291,11 +291,11 @@ def test_streamed_rows_and_thumbnails_preserve_selection_and_active_edit():
         ),
     )
     viewer.filtered_rows = lambda: viewer.rows
-    viewer.render_rows = lambda: app.Inventorizer.render_rows(viewer)
-    app.Inventorizer._rows_loaded(viewer, [{"id": 20, "label": "S20", "structure": "new.svg"}], current)
+    viewer.render_rows = lambda: app.SampleManager.render_rows(viewer)
+    app.SampleManager._rows_loaded(viewer, [{"id": 20, "label": "S20", "structure": "new.svg"}], current)
     assert order == ["10"]
     viewer.structure_images["new.svg"] = object()
-    app.Inventorizer._structure_image_finished(viewer, "new.svg")
+    app.SampleManager._structure_image_finished(viewer, "new.svg")
 
     assert order == ["20", "10"]
     assert selected == {"10"}
@@ -324,10 +324,10 @@ def test_structure_sources_queue_once_in_arrival_order(monkeypatch):
         _load_structure_images=lambda: None,
     )
 
-    app.Inventorizer.load_structure_images(viewer, [
+    app.SampleManager.load_structure_images(viewer, [
         {"structure": "first.svg"}, {"structure": "cached.svg"},
     ])
-    app.Inventorizer.load_structure_images(viewer, [
+    app.SampleManager.load_structure_images(viewer, [
         {"structure": "second.svg"}, {"structure": "first.svg"},
     ])
 
@@ -335,7 +335,7 @@ def test_structure_sources_queue_once_in_arrival_order(monkeypatch):
     assert viewer.structure_image_pending == {"first.svg", "second.svg"}
     assert len(workers) == 2
     assert all(daemon for _, daemon in workers)
-    app.Inventorizer.load_structure_images(viewer, [
+    app.SampleManager.load_structure_images(viewer, [
         {"structure": f"extra-{number}.svg"} for number in range(20)
     ])
     assert len(workers) == 8
@@ -350,7 +350,7 @@ def test_stop_retains_rows_already_rendered_before_cancellation():
         _loaded=lambda rows, _cancelled: completed.extend(rows),
     )
 
-    app.Inventorizer._cancelled(viewer, current, [{"id": 10}])
+    app.SampleManager._cancelled(viewer, current, [{"id": 10}])
 
     assert completed == [{"id": 10}, {"id": 2}]
 
@@ -439,7 +439,7 @@ def test_stop_with_pending_thumbnail_keeps_sample(monkeypatch):
         _loaded=lambda *args: errors.append("unexpected completion"),
         _failed=lambda *args: errors.append(args),
     )
-    worker = threading.Thread(target=app.Inventorizer._retrieve,
+    worker = threading.Thread(target=app.SampleManager._retrieve,
                               args=(viewer, {"id": 42}, cancelled, True))
     worker.start()
     try:
@@ -468,7 +468,7 @@ def test_gui_retrieves_all_samples_without_thumbnail_acknowledgement(monkeypatch
         _failed=lambda *args: errors.append(args),
     )
 
-    app.Inventorizer._retrieve(viewer, {"id": 42}, cancelled, True)
+    app.SampleManager._retrieve(viewer, {"id": 42}, cancelled, True)
 
     assert not errors
     assert sorted(row["id"] for row in arrivals) == [1, 2, 10]
@@ -495,14 +495,14 @@ def test_ready_rows_wait_for_all_preceding_details_and_thumbnails():
     second = {"id": 2, "label": "S2", "_inventory_position": 1}
     first = {"id": 10, "label": "S10", "_inventory_position": 0}
     viewer.rows.append(second)
-    app.Inventorizer.render_rows(viewer)
+    app.SampleManager.render_rows(viewer)
     assert not inserted
     viewer.rows.append(first)
     viewer.structure_rows_pending.add(10)
-    app.Inventorizer.render_rows(viewer)
+    app.SampleManager.render_rows(viewer)
     assert not inserted
     viewer.structure_rows_pending.clear()
-    app.Inventorizer.render_rows(viewer)
+    app.SampleManager.render_rows(viewer)
     assert list(inserted) == ["10", "2"]
 
 
@@ -523,8 +523,8 @@ def test_thumbnail_acknowledgement_follows_image_assignment_and_idle_redraw(monk
         status=SimpleNamespace(configure=lambda **kwargs: None),
         colors={"muted": "gray"}, after_idle=idle_callbacks.append,
     )
-    viewer._structure_image_finished = lambda source: app.Inventorizer._structure_image_finished(viewer, source)
-    app.Inventorizer._structure_image_loaded(viewer, source, b"png bytes")
+    viewer._structure_image_finished = lambda source: app.SampleManager._structure_image_finished(viewer, source)
+    app.SampleManager._structure_image_loaded(viewer, source, b"png bytes")
     assert assigned == [("10", {"image": image})]
     assert not displayed.is_set()
     assert len(idle_callbacks) == 1
@@ -558,14 +558,14 @@ def test_row_appears_with_its_thumbnail_without_changing_retrieval_status(monkey
         ),
     )
     viewer.filtered_rows = lambda: viewer.rows
-    viewer.render_rows = lambda: app.Inventorizer.render_rows(viewer)
-    viewer._structure_image_finished = lambda source: app.Inventorizer._structure_image_finished(viewer, source)
+    viewer.render_rows = lambda: app.SampleManager.render_rows(viewer)
+    viewer._structure_image_finished = lambda source: app.SampleManager._structure_image_finished(viewer, source)
     row = {"id": 10, "label": "S10", "structure": "/images/samples/sample.svg"}
 
-    app.Inventorizer._rows_loaded(viewer, [row], current, displayed)
+    app.SampleManager._rows_loaded(viewer, [row], current, displayed)
     assert not inserted
     assert not displayed.is_set()
-    app.Inventorizer._structure_image_loaded(viewer, row["structure"], b"png bytes")
+    app.SampleManager._structure_image_loaded(viewer, row["structure"], b"png bytes")
     assert inserted["10"]["image"] is image
     assert not status_updates
     assert not displayed.is_set()
@@ -639,10 +639,10 @@ def test_filter_count_retains_aborted_status_until_next_load(aborted):
     )
     for count in (2, 1, 0):
         del rows[count:]
-        app.Inventorizer.filter_by_location(viewer)
+        app.SampleManager.filter_by_location(viewer)
         assert updates[-1]["text"] == app.inventory_status_text(count, []) + (" (aborted)" if aborted else "")
     viewer.inventory_cancel_event = threading.Event()
-    app.Inventorizer.filter_by_location(viewer)
+    app.SampleManager.filter_by_location(viewer)
     assert not updates[-1]["text"].endswith("(aborted)")
 
 
@@ -662,6 +662,6 @@ def test_loaded_status_marks_aborted_load(aborted):
         print_button=SimpleNamespace(configure=lambda **kwargs: None),
         column_visibility={"structure": SimpleNamespace(get=lambda: False)},
     )
-    app.Inventorizer._loaded(viewer, [{"id": 10}], current)
+    app.SampleManager._loaded(viewer, [{"id": 10}], current)
     expected = app.inventory_status_text(1, []) + (" (aborted)" if aborted else "")
     assert updates[-1]["text"] == expected

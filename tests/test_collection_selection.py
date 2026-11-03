@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from chemotion_inventorizer import gui as app
+from chemotion_sample_manager import gui as app
 
 
 def test_changing_selection_only_updates_controls():
@@ -14,7 +14,7 @@ def test_changing_selection_only_updates_controls():
         collection_value=SimpleNamespace(set=selected.append), inventory_loading=False,
         set_controls_busy=lambda busy: selected.append(busy),
     )
-    app.Inventorizer.load_selected_collection(viewer)
+    app.SampleManager.load_selected_collection(viewer)
     assert selected == ["", False]
 
 
@@ -35,7 +35,7 @@ def test_restores_selection_and_loads_saved_collections_only_on_startup(startup,
         profile_settings={"last_collection": {"id": saved_id, "synchronized": False}},
         startup_load_pending=startup, after_idle=scheduled.append, refresh=refresh,
     )
-    app.Inventorizer._collections_loaded(viewer, [{"id": 42, "label": "Inventory"}])
+    app.SampleManager._collections_loaded(viewer, [{"id": 42, "label": "Inventory"}])
     assert len(labels) == 1
     assert selected == ([0] if saved_id == 42 else [])
     assert scheduled == ([refresh] if startup and saved_id == 42 else [])
@@ -64,7 +64,7 @@ def test_combined_inventory_deduplicates_streams_and_preserves_stop(monkeypatch,
         _cancelled=lambda event, rows: completed.extend(rows),
         _failed=lambda *args: pytest.fail(str(args)),
     )
-    app.Inventorizer._retrieve(viewer, [{"id": 42}, {"id": 43, "_synchronized": True}], cancelled)
+    app.SampleManager._retrieve(viewer, [{"id": 42}, {"id": 43, "_synchronized": True}], cancelled)
     assert calls == [[{"id": 42}, {"id": 43, "_synchronized": True}]]
     assert [row["id"] for row in streamed] == [1, 2, 3]
     assert [row["id"] for row in completed] == [1, 2, 3]

@@ -11,7 +11,7 @@ import sys
 import traceback
 
 
-APP_NAME = "Chemotion Inventorizer"
+APP_NAME = "Chemotion Sample Manager"
 RUNTIME_CHECK = "import tkinter; import resvg_py; from chemotion_api import Instance"
 
 
@@ -62,7 +62,7 @@ def ensure_libmagic(python, log):
                                            Path("/usr/local/bin/brew")) if path.is_file()), None)
     if not brew:
         raise RuntimeError("libmagic is missing. Install Homebrew from https://brew.sh, "
-                           "then reopen Chemotion Inventorizer to install libmagic automatically.")
+                           "then reopen Chemotion Sample Manager to install libmagic automatically.")
     log.write("Installing libmagic with Homebrew…\n")
     log.flush()
     subprocess.run([brew, "install", "libmagic"], stdout=log,
@@ -131,7 +131,7 @@ def main(argv=None):
             if options.setup_only:
                 print(f"Environment ready: {python.parent.parent}")
                 return 0
-            command_arguments = ["-m", "chemotion_inventorizer", *app_arguments]
+            command_arguments = ["-m", "chemotion_sample_manager", *app_arguments]
             if sys.platform == "win32":
                 pythonw = python.with_name("pythonw.exe")
                 if pythonw.is_file():

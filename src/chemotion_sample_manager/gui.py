@@ -479,7 +479,7 @@ class ColumnDragFeedback:
         self.marker.place_forget()
 
 
-class Inventorizer(tk.Tk):
+class SampleManager(tk.Tk):
     headings = INVENTORY_HEADINGS
     keys = INVENTORY_KEYS
     column_menu_order = ("structure", "inventory_sample", "label", "location", "decoupled", "molecule", "density", "sample", "vendor", "amount", "last_modified", "created")
@@ -503,7 +503,7 @@ class Inventorizer(tk.Tk):
         selected_columns = visible_columns(self.profile_settings.get("visible_columns", self.default_visible_columns), self.column_order)
         self.column_visibility = {key: tk.BooleanVar(value=key in selected_columns) for key in self.keys}
         self.server_value.trace_add("write", self.connection_details_changed); self.username_value.trace_add("write", self.connection_details_changed); self.password_value.trace_add("write", self.connection_details_changed)
-        icon_path = os.environ.get("CHEMOTION_INVENTORIZER_ICON")
+        icon_path = os.environ.get("CHEMOTION_SAMPLE_MANAGER_ICON")
         # macOS bundles supply the Dock icon; iconbitmap adds a title-bar
         # document icon, while iconphoto changes the native Dock rendering.
         if sys.platform != "darwin" and icon_path and Path(icon_path).is_file():

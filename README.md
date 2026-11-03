@@ -1,8 +1,8 @@
-# Chemotion Inventorizer
+# Chemotion Sample Manager
 
-Chemotion Inventorizer is a desktop app based on [Chemotion API](https://github.com/Chemotion/chemotionapi) for viewing, bulk-editing, and printing [Chemotion ELN](https://chemotion.net/) sample information.
+Chemotion Sample Manager is a desktop app based on [Chemotion API](https://github.com/Chemotion/chemotionapi) for viewing, bulk-editing, and printing [Chemotion ELN](https://chemotion.net/) sample information.
 
-![Chemotion Inventorizer with anonymized locations and connection details](docs/images/inventory-anonymized.png)
+![Chemotion Sample Manager with anonymized locations and connection details](docs/images/inventory-anonymized.png)
 
 *Inventory view with molecule structures and sample details. Identifying text has been anonymized.*
 
@@ -32,15 +32,15 @@ Chemotion Inventorizer is a desktop app based on [Chemotion API](https://github.
 ### Customizable launcher
 1. Install Python 3.14, if not installed: [Python for macOS](https://www.python.org/downloads/macos/) or [Python for Windows](https://www.python.org/downloads/windows/). On Windows, select **Add python.exe to PATH** and keep **tcl/tk and IDLE** selected during installation.
 2. Download **Source code (zip)** from [Releases](https://github.com/Kenichi-Endo/chemotion-inventorizer/releases) and extract it, or clone the repository. Keep the project folder intact when moving or sharing the app.
-3. Open `Chemotion Inventorizer.app` on macOS or double-click `Chemotion Inventorizer.cmd` on Windows. Keep an internet connection available during automatic dependency installation. The first launch may take a few minutes.
+3. Open `Chemotion Sample Manager.app` on macOS or double-click `Chemotion Sample Manager.cmd` on Windows. Keep an internet connection available during automatic dependency installation. The first launch may take a few minutes.
 
-If macOS says **The application “Chemotion Inventorizer.app” cannot be opened**:
+If macOS says **The application “Chemotion Sample Manager.app” cannot be opened**:
 
 1. Open Terminal, type `cd ` (including the space), drag the extracted project folder into Terminal, and press Return.
 2. Run:
 
    ```sh
-   chmod +x "Chemotion Inventorizer.app/Contents/MacOS/Chemotion Inventorizer"
+   chmod +x "Chemotion Sample Manager.app/Contents/MacOS/Chemotion Sample Manager"
    ```
 
 3. Reopen the app.
@@ -69,7 +69,7 @@ If macOS says **The application “Chemotion Inventorizer.app” cannot be opene
 *A4 inventory checklist with verification columns. Locations have been anonymized.*
 
 ## Customization
-Edit the Python files in `src/chemotion_inventorizer/` manually or with a coding agent, then restart the customizable launcher.
+Edit the Python files in `src/chemotion_sample_manager/` manually or with a coding agent, then restart the customizable launcher.
 
 ## Data handling
 Most communication with Chemotion uses the built-in functions of [chemotionapi](https://github.com/Chemotion/chemotionapi) version **312.0.2**: sign-in (`Instance.login()`), loading collections (`Instance.get_root_collection()`, which also calls `RootCollection.load_sync_collection()`), sample listing (`ElementSet.load_elements()` and `ElementSet.next_page()`), sample details (`Instance.get_sample()`), sample edits (`Sample.save()`), and removing samples from collections (`Collection.remove_elements()`). Vendor metadata, creating molecule names, structure images, and collection exports use custom requests through the same authenticated connection (`Connection.get()`, `Connection.post()`, and `Connection.put()`).
@@ -80,13 +80,15 @@ With **Remember** enabled, your username and password are saved locally in macOS
 
 Server and display preferences are saved separately in the current user's profile:
 
-- macOS: `~/Library/Application Support/Chemotion Inventorizer/settings.json`
-- Windows: `%APPDATA%\Chemotion Inventorizer\settings.json`
+- macOS: `~/Library/Application Support/Chemotion Sample Manager/settings.json`
+- Windows: `%APPDATA%\Chemotion Sample Manager\settings.json`
 
-Customizable launcher logs are in `~/Library/Logs/Chemotion Inventorizer/launcher.log` on macOS or `%LOCALAPPDATA%\Chemotion Inventorizer\Logs\launcher.log` on Windows.
+Preferences from Chemotion Inventorizer are loaded automatically when no new settings exist. Saved credentials continue to use the existing secure-storage identifier.
+
+Customizable launcher logs are in `~/Library/Logs/Chemotion Sample Manager/launcher.log` on macOS or `%LOCALAPPDATA%\Chemotion Sample Manager\Logs\launcher.log` on Windows.
 
 ## Source files
-Files in `src/chemotion_inventorizer/`:
+Files in `src/chemotion_sample_manager/`:
 
 | Source file | Purpose |
 | --- | --- |
