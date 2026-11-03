@@ -63,3 +63,35 @@ def test_saved_location_survives_partial_loading():
         ("All locations", "Shelf A", "Shelf B"),
         ("All locations", "Shelf A", "Shelf B"),
     ]
+
+
+def test_edit_refresh_keeps_filter_membership_until_filter_changes():
+    rows = [{"id": 1, "sample": "Changed", "location": "Shelf B"},
+            {"id": 2, "sample": "Ethanol", "location": "Shelf A"}]
+    displayed = {"1": {}}
+    view = SimpleNamespace(
+        rows=rows, sort_key="sample", sort_reverse=False,
+        tree=SimpleNamespace(
+            get_children=lambda: tuple(displayed),
+            item=lambda item_id, **options: displayed.update({item_id: options}),
+            move=lambda *args: None,
+            selection=lambda: (), selection_set=lambda *args: None,
+        ),
+        location_filter=SimpleNamespace(get=lambda: "Shelf A"),
+        location_filter_retained_row_ids=set(),
+        text_filter=SimpleNamespace(get=lambda: "Ethanol"),
+        column_visibility={"structure": SimpleNamespace(get=lambda: False)},
+        structure_images={}, keys=("sample",),
+        visible_column_keys=lambda: ("sample",), row_values=lambda row: (row["sample"],),
+    )
+    view.filtered_rows = lambda: SampleManager.filtered_rows(view)
+    SampleManager.render_rows(view, preserve_display_order=True)
+    assert tuple(displayed) == ("1",)
+    assert displayed["1"]["values"] == ("Changed",)
+    assert view.filtered_rows() == [rows[0]]
+    view.selected_row_ids = set()
+    view.status = SimpleNamespace(configure=lambda **kwargs: None)
+    view.colors = {"muted": "gray"}
+    view.render_rows = lambda: None
+    SampleManager.filter_by_location(view)
+    assert view.filtered_rows() == [rows[1]]

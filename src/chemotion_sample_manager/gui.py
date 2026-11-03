@@ -1055,6 +1055,7 @@ class SampleManager(tk.Tk):
         self.profile_settings["newest_samples_first"] = newest_first
         save_profile_settings(self.profile_settings)
         self.loaded_collections = [dict(collection) for collection in collections]
+        self.edit_display_row_ids = None
         self.rows = []; self.structure_rows_pending.clear(); self.selected_row_ids.clear(); self.location_filter_retained_row_ids.clear(); self.render_rows()
         self.sort_key = "label"; self.sort_reverse = newest_first; self.update_sort_headings()
         cancelled = threading.Event(); self.inventory_cancel_event = cancelled; self.inventory_loading = True
@@ -1214,6 +1215,7 @@ class SampleManager(tk.Tk):
         self.profile_settings["location_filter"] = self.location_filter.get()
         save_profile_settings(self.profile_settings)
     def filter_by_location(self, _event=None):
+        self.edit_display_row_ids = None
         self.location_filter_retained_row_ids.clear()
         visible_ids = {str(row["id"]) for row in self.filtered_rows()}
         selected_ids = set(self.tree.selection()) & visible_ids
@@ -1251,6 +1253,9 @@ class SampleManager(tk.Tk):
         except re.error as error:
             self.status.configure(text=f"Invalid regex: {error}", fg=self.colors["muted"])
     def filtered_rows(self):
+        retained_ids = getattr(self, "edit_display_row_ids", None)
+        if retained_ids is not None:
+            return [row for row in self.rows if str(row["id"]) in retained_ids]
         rows = rows_for_location_filter(self.rows, self.location_filter.get(), self.location_filter_retained_row_ids)
         text_filter = getattr(self, "text_filter", None)
         if text_filter is None or not text_filter.get():
@@ -1267,6 +1272,10 @@ class SampleManager(tk.Tk):
     def render_rows(self, preserve_display_order=False):
         existing_ids = self.tree.get_children()
         displayed_ids = existing_ids if preserve_display_order else ()
+        if preserve_display_order:
+            # Keep filter membership stable after edits, including for later
+            # selection and printing, until the user changes a filter or reloads.
+            self.edit_display_row_ids = set(existing_ids)
         key = self.sort_key
         def sort_value(item):
             if key == "label":
