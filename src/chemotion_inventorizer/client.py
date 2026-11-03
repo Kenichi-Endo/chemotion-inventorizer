@@ -13,6 +13,9 @@ from urllib.parse import urlsplit
 from chemotion_api import Instance
 from chemotion_api.connection import Connection, request_error
 from chemotion_api.elements import ElementSet
+from chemotion_api.elements.sample import Sample
+from chemotion_api.elements.utils import GasType
+from chemotion_api.generic_segments import GenericSegments
 from requests.exceptions import RequestException
 from .inventory import (
     as_dict,
@@ -115,6 +118,14 @@ class InventoryConnection(Connection):
                 if attempt + 1 < TRANSIENT_REQUEST_ATTEMPTS:
                     time.sleep(attempt + 1)
         raise ConnectionError(f"Could not reach Chemotion after {TRANSIENT_REQUEST_ATTEMPTS} attempts: {last_error}") from last_error
+
+
+class InventorySample(Sample):
+    @property
+    def gas_type(self):
+        # Inventory edits retain the stored gas settings. The upstream getter
+        # loads the linked reaction and can fail on unrelated custom fields.
+        return self.properties.get("gas_type", GasType.OFF)
 
 
 class ChemotionClient:
@@ -397,6 +408,11 @@ class ChemotionClient:
         # Fetch current data before saving: GUI rows may be stale and save()
         # serializes the complete sample, including its container and flags.
         sample = self.instance.get_sample(sample_id)
+        if isinstance(sample, Sample):
+            sample = InventorySample(GenericSegments(self.connection), self.connection,
+                                     json_data=sample.json_data, element_type="sample")
+            # This is a full get_sample response, not a partial listing record.
+            sample._data_loaded = True
         for key, value in properties.items():
             sample.properties[key] = value
         if molecule_name_id is not None:

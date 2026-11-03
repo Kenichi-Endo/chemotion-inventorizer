@@ -8,6 +8,20 @@ import pytest
 from test_amount_display import app
 
 
+@pytest.mark.parametrize("gas_type", list(api_client.GasType))
+def test_inventory_serialization_does_not_load_linked_reaction(monkeypatch, gas_type):
+    sample = api_client.InventorySample.__new__(api_client.InventorySample)
+    sample._is_partial = False
+    sample._properties = {"gas_type": gas_type}
+
+    def unexpected_reaction_load(self):
+        raise IndexError("list index out of range")
+
+    monkeypatch.setattr(api_client.Sample, "reload_reaction", unexpected_reaction_load)
+    assert sample.gas_type is gas_type
+    assert sample.properties["gas_type"] is gas_type
+
+
 def test_mixture_names_use_components():
     row = inventory.inventory_row({
         "sample_type": "Mixture", "name": "Sample name", "showed_name": "Old name",
