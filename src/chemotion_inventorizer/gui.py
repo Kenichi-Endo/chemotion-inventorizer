@@ -595,18 +595,23 @@ class Inventorizer(tk.Tk):
         column_labels = dict(zip(self.keys, self.headings))
         selector_keys = self.column_menu_order
         for key in selector_keys: self.columns_menu.add_checkbutton(label=column_labels[key], variable=self.column_visibility[key], command=lambda key=key: self.toggle_column(key))
-        self.text_filter = tk.StringVar()
+        saved_location = self.profile_settings.get("location_filter", "All locations")
+        self.location_filter.set(saved_location if isinstance(saved_location, str) else "All locations")
+        saved_filter = self.profile_settings.get("text_filter", "")
+        self.text_filter = tk.StringVar(value=saved_filter if isinstance(saved_filter, str) else "")
         ttk.Label(self.location_controls, text="Filter:").pack(side="left", padx=(12, 0))
-        self.filter_display = tk.StringVar(value="regex")
+        self.filter_display = tk.StringVar(value=self.text_filter.get() or "regex")
         self.updating_filter_display = False
         self.filter_entry = ttk.Entry(self.location_controls, textvariable=self.filter_display, width=18,
-                                      foreground="gray")
+                                      foreground="" if self.text_filter.get() else "gray")
         self.filter_entry.pack(side="left", padx=4)
         self.filter_display.trace_add("write", self.filter_display_changed)
         self.filter_entry.bind("<FocusIn>", self.update_filter_placeholder)
         self.filter_entry.bind("<FocusOut>", self.update_filter_placeholder)
         self.filter_entry.bind("<Escape>", self.clear_text_filter)
         self.text_filter.trace_add("write", self.filter_by_text)
+        self.text_filter.trace_add("write", self.save_filters)
+        self.location_filter.trace_add("write", self.save_filters)
         ttk.Label(self.location_controls, text="Location:").pack(side="left", padx=(12, 0))
         self.location_filter_menu = ttk.Combobox(self.location_controls, textvariable=self.location_filter,
                                                 values=("All locations",), state="readonly", width=18)
@@ -664,8 +669,6 @@ class Inventorizer(tk.Tk):
         self.update_sort_headings()
         for key, width in self.column_widths.items(): self.tree.column(key, width=width, minwidth=self.column_min_widths[key], stretch=False, anchor="center" if key in {"decoupled", "inventory_sample"} else "w")
         self.restore_column_widths()
-        if getattr(self, "text_filter", None) is not None and self.text_filter.get():
-            self.filter_by_text()
         vertical = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview); horizontal = ttk.Scrollbar(frame, orient="horizontal", command=self.tree.xview); self.vertical_scrollbar = vertical; self.horizontal_scrollbar = horizontal; self.tree.configure(yscrollcommand=self.tree_yview_changed, xscrollcommand=self.tree_xview_changed)
         self.tree.grid(row=0,column=0,sticky="nsew"); vertical.grid(row=0,column=1,sticky="ns"); horizontal.grid(row=1,column=0,sticky="ew"); frame.columnconfigure(0,weight=1); frame.rowconfigure(0,weight=1)
         self.progress_area = tk.Frame(self, padx=24); self.progress_area.grid(row=2, column=0, sticky="ew", pady=(0, 18))
@@ -675,6 +678,8 @@ class Inventorizer(tk.Tk):
         self.progress.pack(side="left", fill="x", expand=True)
         self.bind("<Escape>", self.cancel_inventory_load, add="+")
         self.apply_appearance(True); self.watch_system_appearance()
+        if self.text_filter.get():
+            self.filter_by_text()
         self.after_idle(self.maximize_window)
         if username and password and client.CHEMOTION_URL != DEFAULT_CHEMOTION_URL:
             # Defer until the window has been built so the app can paint before
@@ -1198,8 +1203,15 @@ class Inventorizer(tk.Tk):
         return "break"
     def update_location_filter(self):
         locations = location_choices(self.rows)
+        selected = self.location_filter.get()
+        # Keep the selection even before its rows arrive, or if loading is stopped.
+        if selected != "All locations" and selected not in locations:
+            locations = tuple(sorted((*locations, selected), key=str.casefold))
         choices = ("All locations", *locations); self.location_filter_menu.configure(values=choices)
-        if self.location_filter.get() not in choices: self.location_filter.set("All locations")
+    def save_filters(self, *_args):
+        self.profile_settings["text_filter"] = self.text_filter.get()
+        self.profile_settings["location_filter"] = self.location_filter.get()
+        save_profile_settings(self.profile_settings)
     def filter_by_location(self, _event=None):
         self.location_filter_retained_row_ids.clear()
         visible_ids = {str(row["id"]) for row in self.filtered_rows()}
