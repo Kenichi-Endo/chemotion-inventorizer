@@ -1439,6 +1439,9 @@ class Inventorizer(tk.Tk):
             self.after_idle(displayed.set)
     def remember_selection(self, _event=None):
         self.selected_row_ids = set(self.tree.selection())
+        if self.editing_cell:
+            self.editing_rows = [row for row in self.filtered_rows()
+                                 if str(row["id"]) in self.selected_row_ids]
     def select_all_visible(self, _event=None):
         self.tree.selection_set(self.tree.get_children())
         self.selected_row_ids = set(self.tree.selection())
@@ -1521,7 +1524,7 @@ class Inventorizer(tk.Tk):
         else:  # Command: add this row while preserving the existing selection.
             selected_ids.add(item_id)
         self.tree.selection_set(tuple(selected_ids)); self.tree.focus(item_id)
-        self.selected_row_ids = selected_ids
+        self.remember_selection()
         return "break"
     def edit_amount(self, event):
         """Edit the supported inventory fields directly in the table."""

@@ -19,6 +19,32 @@ def test_mixture_names_use_components():
     assert inventory.inventory_row({"sample_type": "Mixture"})["molecule"] == "(Mixture) —"
 
 
+@pytest.mark.parametrize("state, expected_ids", [(0, [1, 3]), (1, [1, 2, 3])])
+def test_selection_extended_during_edit_updates_commit_targets(state, expected_ids):
+    rows = [{"id": number} for number in (1, 2, 3)]
+    selection = {"1"}
+    saved = []
+    viewer = SimpleNamespace(
+        editing_cell=("1", "vendor"), editing_rows=rows[:1],
+        selected_row_ids={"1"}, filtered_rows=lambda: rows,
+        amount_editor=SimpleNamespace(get=lambda: "New vendor"),
+        tree=SimpleNamespace(
+            identify_row=lambda y: "3", selection=lambda: tuple(selection),
+            selection_set=lambda ids: (selection.clear(), selection.update(ids)),
+            get_children=lambda: ("1", "2", "3"),
+            focus=lambda *args: "1",
+        ),
+        cancel_amount_edit=lambda: None,
+        _save_vendor=lambda targets, value: saved.append((targets, value)),
+    )
+    viewer.remember_selection = lambda: app.Inventorizer.remember_selection(viewer)
+
+    app.Inventorizer.extend_edit_selection(viewer, SimpleNamespace(y=10, state=state))
+    app.Inventorizer.finish_vendor_edit(viewer, rows[0], advance=True)
+
+    assert saved == [([rows[number - 1] for number in expected_ids], "New vendor")]
+
+
 def test_mixture_molecule_cell_does_not_create_editor():
     assert app.Inventorizer.edit_name(SimpleNamespace(), {"sample_type": "Mixture"}, "1", "molecule") == "break"
 
