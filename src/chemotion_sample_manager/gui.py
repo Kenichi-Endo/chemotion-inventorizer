@@ -537,9 +537,23 @@ class SampleManager(tk.Tk):
         self.login_controls = tk.Frame(self.controls); self.login_controls.pack(anchor="w")
         self.location_controls = tk.Frame(self.controls); self.location_controls.pack(anchor="w", pady=(6, 0))
 
-        ttk.Label(self.login_controls, text="Server:").pack(side="left", padx=(4,0)); self.server_entry = ttk.Entry(self.login_controls, textvariable=self.server_value, width=28); self.server_entry.pack(side="left", padx=4); ttk.Label(self.login_controls, text="Username:").pack(side="left", padx=(4,0)); self.username_entry = ttk.Entry(self.login_controls, textvariable=self.username_value, width=9); self.username_entry.pack(side="left", padx=4); ttk.Label(self.login_controls, text="Password:").pack(side="left"); self.password_entry = ttk.Entry(self.login_controls, textvariable=self.password_value, width=21, show="•"); self.password_entry.pack(side="left", padx=4); self.remember_checkbutton = ttk.Checkbutton(self.login_controls, text="Remember", variable=self.remember_credentials, command=self.remember_credentials_changed); self.remember_checkbutton.pack(side="left", padx=(0, 4)); self.login_button = ttk.Button(self.login_controls, text="Sign in", command=self.login); self.login_button.pack(side="left", padx=(0, 12)); self.server_entry.bind("<Return>", self.login_from_return); self.username_entry.bind("<Return>", self.login_from_return); self.password_entry.bind("<Return>", self.login_from_return)
+        ttk.Label(self.login_controls, text="Server:").pack(side="left", padx=(4,0)); self.server_entry = ttk.Entry(self.login_controls, textvariable=self.server_value, width=28); self.server_entry.pack(side="left", padx=4)
+        credential_controls = ttk.Frame(self.login_controls)
+        credential_controls.pack(side="left", padx=4)
+        ttk.Label(credential_controls, text="Username:").grid(row=0, column=0, sticky="e")
+        self.username_entry = ttk.Entry(credential_controls, textvariable=self.username_value, width=21)
+        self.username_entry.grid(row=0, column=1, padx=4)
+        ttk.Label(credential_controls, text="Password:").grid(row=1, column=0, sticky="e", pady=(4, 0))
+        self.password_entry = ttk.Entry(credential_controls, textvariable=self.password_value, width=21, show="•")
+        self.password_entry.grid(row=1, column=1, padx=4, pady=(4, 0))
+        sign_in_controls = ttk.Frame(self.login_controls)
+        sign_in_controls.pack(side="left", padx=(0, 12))
+        self.remember_checkbutton = ttk.Checkbutton(sign_in_controls, text="Remember", variable=self.remember_credentials, command=self.remember_credentials_changed)
+        self.remember_checkbutton.pack(pady=(0, 4))
+        self.login_button = ttk.Button(sign_in_controls, text="Sign in", command=self.login)
+        self.login_button.pack()
+        self.server_entry.bind("<Return>", self.login_from_return); self.username_entry.bind("<Return>", self.login_from_return); self.password_entry.bind("<Return>", self.login_from_return)
         self.server_entry.configure(width=19)
-        self.username_entry.configure(width=5)
         self.collection_controls = ttk.Frame(self.login_controls)
         self.collection_controls.pack(side="left")
         ttk.Label(self.collection_controls, text="Collections:").pack(side="left", padx=(4, 0))
@@ -564,12 +578,14 @@ class SampleManager(tk.Tk):
         self.loaded_collections = []
         self.startup_load_pending = True
         self.loading_order = tk.StringVar(value=("Oldest samples first" if self.profile_settings.get("newest_samples_first") is False else "Newest samples first"))
-        self.loading_order_menu = ttk.OptionMenu(self.collection_controls, self.loading_order,
+        loading_controls = ttk.Frame(self.collection_controls)
+        loading_controls.pack(side="left", padx=4)
+        self.loading_order_menu = ttk.OptionMenu(loading_controls, self.loading_order,
                                                  self.loading_order.get(),
                                                  "Newest samples first", "Oldest samples first")
-        self.loading_order_menu.pack(side="left", padx=4)
-        self.refresh_button = ttk.Button(self.collection_controls, text="Go", command=self.refresh)
-        self.refresh_button.pack(side="left", padx=4)
+        self.loading_order_menu.pack()
+        self.refresh_button = ttk.Button(loading_controls, text="Go", command=self.refresh)
+        self.refresh_button.pack(pady=(4, 0))
 
         self.columns_button = ttk.Menubutton(self.location_controls, text="Columns")
         self.columns_menu = tk.Menu(self.columns_button, tearoff=False)
