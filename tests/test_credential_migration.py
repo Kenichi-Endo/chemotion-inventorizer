@@ -38,6 +38,9 @@ def store(request, monkeypatch):
         monkeypatch.setattr(settings, "windows_save_credentials", save)
         monkeypatch.setattr(settings, "windows_clear_credentials", clear)
     else:
+        monkeypatch.setattr(settings, "Path", lambda path: SimpleNamespace(
+            is_file=lambda: path == "/usr/bin/security"))
+
         def run(command, **kwargs):
             service = command[command.index("-s") + 1]
             if command[1] == "find-generic-password":
