@@ -631,6 +631,7 @@ class Inventorizer(tk.Tk):
                       self.font_size_spinbox, self.structure_size_spinbox):
             field.bind("<Escape>", self.defocus_field)
         self.tree.bind("<Command-a>", self.select_all_visible)
+        self.tree.bind("<Escape>", self.deselect_all_rows)
         self.tree.bind("<Delete>", self.delete_selected_row)
         self.tree.bind(f"<{multi_selection_modifier(self.tk.call('tk', 'windowingsystem'))}-Button-1>", self.extend_edit_selection)
         self.tree.bind("<Shift-Button-1>", self.extend_edit_selection)
@@ -1445,6 +1446,11 @@ class Inventorizer(tk.Tk):
     def select_all_visible(self, _event=None):
         self.tree.selection_set(self.tree.get_children())
         self.selected_row_ids = set(self.tree.selection())
+        return "break"
+    def deselect_all_rows(self, _event=None):
+        self.tree.selection_remove(self.tree.selection())
+        self.selected_row_ids.clear()
+        self.focus_set()
         return "break"
     def delete_selected_row(self, _event=None):
         """Confirm removal of the focused selected row from all loaded collections."""
