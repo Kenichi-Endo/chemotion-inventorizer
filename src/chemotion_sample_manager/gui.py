@@ -532,7 +532,7 @@ class SampleManager(tk.Tk):
         self.minsize(*minimum_window_size(*screen_size))
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
-        self.top = tk.Frame(self, padx=24, pady=18); self.top.grid(row=0, column=0, sticky="ew")
+        self.top = tk.Frame(self, padx=12, pady=8); self.top.grid(row=0, column=0, sticky="ew")
         self.controls = tk.Frame(self.top); self.controls.pack(anchor="w", pady=(8, 0))
         self.login_controls = tk.Frame(self.controls); self.login_controls.pack(anchor="w")
         self.location_controls = tk.Frame(self.controls); self.location_controls.pack(anchor="w", pady=(6, 0))
@@ -623,7 +623,7 @@ class SampleManager(tk.Tk):
         self.queued_exports = 0
         self.structure_image_variants = {}
         self.structure_images = {}; self.structure_image_pending = set(); self.structure_image_queue = deque(); self.structure_image_queue_lock = threading.Lock(); self.structure_image_worker_active = False; self.structure_image_waiters = {}; self.structure_rows_pending = set()
-        frame = ttk.Frame(self, padding=(12, 12, 12, 0), style="Inventory.TFrame"); frame.grid(row=1, column=0, sticky="nsew", padx=24); self.tree = InventoryTreeview(frame, columns=self.keys, displaycolumns=self.displayed_data_column_keys(), show="tree headings" if self.column_visibility["structure"].get() else "headings", style="Inventory.Treeview", selectmode="extended")
+        frame = ttk.Frame(self, padding=(12, 12, 12, 0), style="Inventory.TFrame"); frame.grid(row=1, column=0, sticky="nsew", padx=12); self.tree = InventoryTreeview(frame, columns=self.keys, displaycolumns=self.displayed_data_column_keys(), show="tree headings" if self.column_visibility["structure"].get() else "headings", style="Inventory.Treeview", selectmode="extended")
         self.style.pixel_tree = self.tree
         self.tree.bind("<<TreeviewSelect>>", self.remember_selection)
         enable_table_smooth_scrolling(self.tree)
@@ -668,7 +668,7 @@ class SampleManager(tk.Tk):
         self.restore_column_widths()
         vertical = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview); horizontal = ttk.Scrollbar(frame, orient="horizontal", command=self.tree.xview); self.vertical_scrollbar = vertical; self.horizontal_scrollbar = horizontal; self.tree.configure(yscrollcommand=self.tree_yview_changed, xscrollcommand=self.tree_xview_changed)
         self.tree.grid(row=0,column=0,sticky="nsew"); vertical.grid(row=0,column=1,sticky="ns"); horizontal.grid(row=1,column=0,sticky="ew"); frame.columnconfigure(0,weight=1); frame.rowconfigure(0,weight=1)
-        self.progress_area = tk.Frame(self, padx=24); self.progress_area.grid(row=2, column=0, sticky="ew", pady=(0, 18))
+        self.progress_area = tk.Frame(self, padx=12); self.progress_area.grid(row=2, column=0, sticky="ew", pady=(0, 8))
         self.status_area = tk.Frame(self.progress_area); self.status_area.pack(side="left", padx=(0, 12))
         self.status = StatusLabel(self.status_area, text="0 samples"); self.status.pack(anchor="w")
         self.progress = ttk.Progressbar(self.progress_area, mode="determinate", maximum=100, style="Inventory.Horizontal.TProgressbar")
