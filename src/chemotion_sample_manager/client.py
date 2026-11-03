@@ -6,6 +6,7 @@ import threading
 import time
 import io
 import zipfile
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from pathlib import Path
 from urllib.parse import urlencode
@@ -37,6 +38,7 @@ _authentication_token = None
 
 # Keep concurrent inventory reads small enough to avoid TLS connection bursts.
 MAX_CONCURRENT_SAMPLE_REQUESTS = 8
+MAX_CONCURRENT_LIST_REQUESTS = 4
 SAMPLE_DETAIL_BATCH_SIZE = 100
 REQUEST_TIMEOUT_SECONDS = 45
 TRANSIENT_REQUEST_ATTEMPTS = 3
@@ -248,31 +250,74 @@ class ChemotionClient:
                 raise InventoryLoadCancelled()
 
         check_cancelled()
-        if progress: progress("Retrieving the selected Chemotion collection…")
-        self.login(); check_cancelled(); samples = []
         selected = collections if collections is not None else [{"id": collection_id, "_synchronized": synchronized}]
+        collection_word = "collection" if len(selected) == 1 else "collections"
+        if progress: progress(f"Retrieving {collection_word}: 0 of {len(selected)}…")
+        self.login(); check_cancelled(); samples = []
         sample_contexts = {}
-        # ElementSet handles pagination and synchronized collection queries;
-        # retain raw listing records without triggering serial detail loads.
-        for collection in selected:
+        list_worker_state = threading.local()
+
+        def retrieve_page(collection, page):
             check_cancelled()
-            collection_id = collection["id"]
-            synchronized = bool(collection.get("_synchronized"))
-            collection_label = collection.get("label") or collection.get("name") or str(collection_id)
-            if progress: progress(f"Retrieving sample list: {collection_label}…")
-            elements = ElementSet(self.connection, {"name": "sample", "is_generic": False},
-                                  collection_id, collection_is_sync=synchronized)
-            elements.load_elements(per_page=100)
-            while True:
+            client = getattr(list_worker_state, "client", None)
+            if client is None:
+                client = ChemotionClient()
+                client.login()
+                list_worker_state.client = client
+            check_cancelled()
+            context_id = collection["id"]
+            context_sync = bool(collection.get("_synchronized"))
+            if page == 1:
+                # Use ElementSet to discover pagination without loading details.
+                elements = ElementSet(client.connection, {"name": "sample", "is_generic": False},
+                                      context_id, collection_is_sync=context_sync)
+                elements.load_elements(per_page=100)
+                return [sample.json_data for sample in list.__iter__(elements)], elements.max_page
+            payload = {"page": page, "per_page": 100, "filter_created_at": False,
+                       "product_only": False, "el_type": "sample",
+                       "sync_collection_id" if context_sync else "collection_id": context_id}
+            with client.connection.get("/api/v1/samples.json", data=payload) as response:
+                return response.json().get("samples", []), None
+
+        # Collections and their pages share one bounded pool. Merge in selection
+        # order so overlapping collections retain the same sample context.
+        workers = 1 if sequential else MAX_CONCURRENT_LIST_REQUESTS
+        executor = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="sample-list")
+        pending = {}
+        page_samples = {}
+        remaining_pages = {}
+        completed_collections = 0
+        jobs = deque((index, 1) for index in range(len(selected)))
+        try:
+            while pending or jobs:
                 check_cancelled()
-                batch = [sample.json_data for sample in list.__iter__(elements)]
-                for sample in batch:
-                    if sample["id"] not in sample_contexts:
-                        sample_contexts[sample["id"]] = (collection_id, synchronized)
-                        samples.append(sample)
-                if elements.page >= elements.max_page or not batch: break
-                check_cancelled()
-                elements.next_page()
+                while len(pending) < workers and jobs:
+                    check_cancelled()
+                    index, page = jobs.popleft()
+                    collection = selected[index]
+                    pending[executor.submit(retrieve_page, collection, page)] = (index, page)
+                done, _ = wait(pending, timeout=0.1, return_when=FIRST_COMPLETED)
+                for future in done:
+                    index, page = pending.pop(future)
+                    batch, max_page = future.result()
+                    page_samples[index, page] = batch
+                    if page == 1:
+                        remaining_pages[index] = max_page
+                        jobs.extend((index, number) for number in range(2, max_page + 1))
+                    remaining_pages[index] -= 1
+                    if remaining_pages[index] == 0:
+                        completed_collections += 1
+                        if progress:
+                            progress(f"Retrieving {collection_word}: {completed_collections} of {len(selected)}…")
+        finally:
+            executor.shutdown(wait=not (cancelled and cancelled.is_set()), cancel_futures=True)
+        check_cancelled()
+        for (index, page), batch in sorted(page_samples.items()):
+            collection = selected[index]
+            for sample in batch:
+                if sample["id"] not in sample_contexts:
+                    sample_contexts[sample["id"]] = (collection["id"], bool(collection.get("_synchronized")))
+                    samples.append(sample)
         # The compact list intentionally omits physical location and amount fields.
         # Fetch details in batches, then use a bounded pool for chemical metadata.
         # Each worker owns its authenticated chemotionapi session; mutable

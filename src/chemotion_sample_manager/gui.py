@@ -1074,7 +1074,8 @@ class SampleManager(tk.Tk):
         self.rows = []; self.structure_rows_pending.clear(); self.selected_row_ids.clear(); self.location_filter_retained_row_ids.clear(); self.render_rows()
         self.sort_key = "label"; self.sort_reverse = newest_first; self.update_sort_headings()
         cancelled = threading.Event(); self.inventory_cancel_event = cancelled; self.inventory_loading = True
-        self.set_controls_busy(True); self.show_progress(); self.status.configure(text="Retrieving the selected Chemotion collections… (Esc to stop)",fg=self.colors["accent"]); threading.Thread(target=self._retrieve, args=(collections, cancelled, self.column_visibility["structure"].get(), newest_first), daemon=True).start()
+        collection_word = "collection" if len(collections) == 1 else "collections"
+        self.set_controls_busy(True); self.show_progress(); self.status.configure(text=f"Retrieving {collection_word}: 0 of {len(collections)}… (Esc to stop)",fg=self.colors["accent"]); threading.Thread(target=self._retrieve, args=(collections, cancelled, self.column_visibility["structure"].get(), newest_first), daemon=True).start()
     def cancel_inventory_load(self, _event=None):
         if not self.inventory_loading or not self.inventory_cancel_event or self.inventory_cancel_event.is_set():
             return
@@ -1128,7 +1129,7 @@ class SampleManager(tk.Tk):
         if cancelled is not None and (cancelled.is_set() or cancelled is not self.inventory_cancel_event): return
         self.status.configure(text=f"{message} (Esc to stop)", fg=self.colors["accent"])
         match = re.search(r": (\d+) of (\d+)", message)
-        if match and not message.startswith("Retrieving sample list:"):
+        if match:
             current, total = map(int, match.groups())
             self.progress.configure(maximum=max(total, 1), value=current)
     def _loaded(self, rows, cancelled=None):

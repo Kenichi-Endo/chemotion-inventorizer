@@ -267,6 +267,7 @@ def test_library_pagination_loads_every_page(client, sample_server, monkeypatch,
             response.headers.update({"X-Total": "101", "X-Total-Pages": "2"})
         return response
 
+    monkeypatch.setattr(api_client.InventoryConnection, "send", lambda self, request, **kwargs: send(request, **kwargs))
     monkeypatch.setattr(client.connection, "send", send)
     monkeypatch.setattr(client, "login", lambda: None)
     monkeypatch.setattr(client, "sample_details", lambda *args: {})
@@ -276,7 +277,7 @@ def test_library_pagination_loads_every_page(client, sample_server, monkeypatch,
     rows = client.inventory(42, synchronized=synchronized, progress=progress.append)
     assert pages == [1, 2]
     assert [row["id"] for row in rows] == list(range(101, 0, -1))
-    assert "Retrieving sample list: 42…" in progress
+    assert "Retrieving collection: 1 of 1…" in progress
     assert "Retrieving sample information: 101 of 101…" in progress
 
 
