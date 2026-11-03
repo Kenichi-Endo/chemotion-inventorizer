@@ -1062,20 +1062,12 @@ class Inventorizer(tk.Tk):
         collection = collections[0]
         try:
             def deliver_rows(rows):
-                if not with_structures:
-                    self.after(0, self._rows_loaded, rows, cancelled)
-                    return
-                displayed = threading.Event()
-                self.after(0, self._rows_loaded, rows, cancelled, displayed)
-                # Only the GUI thread can confirm that the image has reached
-                # the table. Stop must also release this wait immediately.
-                while not displayed.wait(0.1):
-                    if cancelled.is_set():
-                        return
+                # Thumbnail workers and ordered row rendering run independently
+                # so image download/redraw delays do not occupy sample workers.
+                self.after(0, self._rows_loaded, rows, cancelled)
             rows = ChemotionClient().inventory(collection["id"], collection.get("_synchronized", False),
                                                 lambda message: self.after(0, self._progress, message, cancelled), cancelled,
-                                                rows_loaded=None if with_structures else deliver_rows,
-                                                row_ready=deliver_rows if with_structures else None, collections=collections)
+                                                rows_loaded=deliver_rows, collections=collections)
             self.after(0, self._loaded, rows, cancelled)
         except InventoryLoadCancelled as stopped:
             self.after(0, self._cancelled, cancelled, stopped.rows)

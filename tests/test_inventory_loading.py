@@ -321,7 +321,7 @@ def test_eight_samples_wait_for_structures_before_more_samples_start(monkeypatch
     assert [row["id"] for row in result] == list(reversed(range(12)))
 
 
-def test_stop_releases_wait_for_thumbnail_and_keeps_sample(monkeypatch):
+def test_stop_with_pending_thumbnail_keeps_sample(monkeypatch):
     prepare_client(monkeypatch)
     cancelled = threading.Event()
     delivered = threading.Event()
@@ -334,9 +334,13 @@ def test_stop_releases_wait_for_thumbnail_and_keeps_sample(monkeypatch):
         return {"id": sample_id}
 
     monkeypatch.setattr(api_client.ChemotionClient, "inventory_entry", entry)
+    def accept_rows(rows, current):
+        delivered.set()
+        current.set()
+
     viewer = SimpleNamespace(
         after=lambda delay, callback, *args: callback(*args),
-        _rows_loaded=lambda rows, current, displayed: delivered.set(),
+        _rows_loaded=accept_rows,
         _progress=lambda *args: None,
         _cancelled=lambda current, rows: retained.extend(rows),
         _loaded=lambda *args: errors.append("unexpected completion"),
@@ -354,6 +358,28 @@ def test_stop_releases_wait_for_thumbnail_and_keeps_sample(monkeypatch):
     assert not errors
     assert started == [10]
     assert retained == [{"id": 10, "_inventory_position": 0}]
+
+
+def test_gui_retrieves_all_samples_without_thumbnail_acknowledgement(monkeypatch):
+    prepare_client(monkeypatch)
+    cancelled = threading.Event()
+    arrivals = []
+    completed = []
+    errors = []
+    viewer = SimpleNamespace(
+        after=lambda delay, callback, *args: callback(*args),
+        _rows_loaded=lambda rows, current: arrivals.extend(rows),
+        _progress=lambda *args: None,
+        _cancelled=lambda *args: errors.append("unexpected cancellation"),
+        _loaded=lambda rows, current: completed.extend(rows),
+        _failed=lambda *args: errors.append(args),
+    )
+
+    app.Inventorizer._retrieve(viewer, {"id": 42}, cancelled, True)
+
+    assert not errors
+    assert sorted(row["id"] for row in arrivals) == [1, 2, 10]
+    assert [row["id"] for row in completed] == [10, 2, 1]
 
 
 def test_ready_rows_wait_for_all_preceding_details_and_thumbnails():
