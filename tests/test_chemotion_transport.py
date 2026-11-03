@@ -153,6 +153,14 @@ def test_inventory_detail_uses_library_sample_loading(client, sample_server):
     assert any(path == "/api/v1/samples/7.json" for _, path, _ in calls)
 
 
+def test_prefetched_details_skip_individual_sample_request(client, sample_server):
+    sample, calls = sample_server
+    row = client.inventory_entry(7, 42, detail=sample)
+    assert row["sample"] == "Original"
+    assert row["vendor"] == "Vendor"
+    assert [path for _, path, _ in calls] == ["/api/v1/chemicals"]
+
+
 @pytest.mark.parametrize("method, args, expected", [
     ("set_location", ("New",), {"location": "New"}),
     ("set_density", ("1.25",), {"density": "1.25"}),
@@ -261,6 +269,7 @@ def test_library_pagination_loads_every_page(client, sample_server, monkeypatch,
 
     monkeypatch.setattr(client.connection, "send", send)
     monkeypatch.setattr(client, "login", lambda: None)
+    monkeypatch.setattr(client, "sample_details", lambda *args: {})
     monkeypatch.setattr(api_client.ChemotionClient, "inventory_entry", lambda self, sample_id, *args: {"id": sample_id})
     monkeypatch.setattr(api_client.ChemotionClient, "login", lambda self: None)
     progress = []

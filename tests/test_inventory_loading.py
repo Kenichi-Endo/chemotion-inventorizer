@@ -37,6 +37,7 @@ def mock_sample_list(monkeypatch, numbers):
 
 def prepare_client(monkeypatch):
     monkeypatch.setattr(api_client.ChemotionClient, "login", lambda self: None)
+    monkeypatch.setattr(api_client.ChemotionClient, "sample_details", lambda *args: {})
     mock_sample_list(monkeypatch, (2, 10, 1))
     monkeypatch.setattr(api_client.ChemotionClient, "inventory_entry",
                         lambda self, sample_id, *args: {"id": sample_id})
@@ -47,6 +48,98 @@ def prepare_client(monkeypatch):
 def test_inventory_returns_descending_numeric_label_order(monkeypatch):
     client = prepare_client(monkeypatch)
     assert [row["id"] for row in client.inventory(42)] == [10, 2, 1]
+
+
+def test_details_load_in_batches_of_100_and_stream_before_next_batch(monkeypatch):
+    client = prepare_client(monkeypatch)
+    mock_sample_list(monkeypatch, range(205))
+    batches = []
+    delivered = []
+
+    def details(ids, collection_id, synchronized):
+        assert len(delivered) == sum(len(batch) for batch in batches)
+        assert (collection_id, synchronized) == (42, False)
+        batches.append(ids)
+        return {number: {"id": number, "location": "Full detail"} for number in ids}
+
+    def entry(self, sample_id, collection_id, synchronized, fallback, detail):
+        assert detail == {"id": sample_id, "location": "Full detail"}
+        return detail.copy()
+
+    monkeypatch.setattr(client, "sample_details", details)
+    monkeypatch.setattr(api_client.ChemotionClient, "inventory_entry", entry)
+    rows = client.inventory(42, rows_loaded=delivered.extend)
+    assert [len(batch) for batch in batches] == [100, 100, 5]
+    assert [row["id"] for row in rows] == list(reversed(range(205)))
+    assert len(delivered) == 205
+
+
+def test_stop_does_not_request_next_detail_batch(monkeypatch):
+    client = prepare_client(monkeypatch)
+    mock_sample_list(monkeypatch, range(101))
+    cancelled = threading.Event()
+    batches = []
+    monkeypatch.setattr(client, "sample_details", lambda ids, *args: batches.append(ids) or {})
+
+    def delivered(rows):
+        cancelled.set()
+
+    with pytest.raises(api_client.InventoryLoadCancelled) as stopped:
+        client.inventory(42, cancelled=cancelled, rows_loaded=delivered)
+    assert len(batches) == 1
+    assert len(batches[0]) == 100
+    assert stopped.value.rows
+
+
+def test_missing_batch_endpoint_falls_back_once_per_load(monkeypatch):
+    client = prepare_client(monkeypatch)
+    mock_sample_list(monkeypatch, range(101))
+    attempts = []
+
+    def unavailable(*args):
+        attempts.append(args)
+        cause = Exception("Not found")
+        cause.status_code = 404
+        raise ConnectionError("Unavailable") from cause
+
+    monkeypatch.setattr(client, "sample_details", unavailable)
+    assert len(client.inventory(42)) == 101
+    assert len(attempts) == 1
+
+
+def test_empty_shared_batch_keeps_individual_reads_and_skips_later_batches(monkeypatch):
+    client = prepare_client(monkeypatch)
+    mock_sample_list(monkeypatch, range(101))
+    attempts = []
+    monkeypatch.setattr(client, "sample_details", lambda *args: attempts.append(args) or {})
+
+    def entry(self, sample_id, collection_id, synchronized, fallback, detail):
+        assert synchronized
+        assert detail is None
+        return {"id": sample_id}
+
+    monkeypatch.setattr(api_client.ChemotionClient, "inventory_entry", entry)
+    assert len(client.inventory(42, synchronized=True)) == 101
+    assert len(attempts) == 1
+
+
+@pytest.mark.parametrize("synchronized", [False, True])
+def test_sample_batch_uses_explicit_ids_and_collection_context(monkeypatch, synchronized):
+    client = api_client.ChemotionClient()
+    calls = []
+
+    def request(path, data, headers, method):
+        calls.append((path, json.loads(data), headers, method))
+        return json.dumps({"samples": [{"id": 1}, {"id": 2}, {"id": 999}]}).encode()
+
+    monkeypatch.setattr(client, "request", request)
+    assert client.sample_details([1, 2], 42, synchronized) == {1: {"id": 1}, 2: {"id": 2}}
+    path, payload, headers, method = calls[0]
+    assert path == "/api/v1/samples/ui_state"
+    assert method == "POST"
+    assert payload == {"ui_state": {"collection_id": 42, "is_sync_to_me": synchronized,
+                                    "all": False, "included_ids": [1, 2], "excluded_ids": []},
+                       "limit": 2}
 
 
 def test_sample_list_status_shows_collection_name(monkeypatch):
@@ -503,19 +596,27 @@ def test_combined_inventory_lists_all_pages_before_details_with_one_progress(mon
             self.load_elements()
 
     all_pages = [(42, 1), (42, 2), (43, 1)]
+    detail_batches = []
 
-    def entry(self, sample_id, collection_id, synchronized, fallback):
+    def details(ids, collection_id, synchronized):
+        assert listed == all_pages
+        detail_batches.append((ids, collection_id, synchronized))
+        return {}
+
+    def entry(self, sample_id, collection_id, synchronized, fallback, detail):
         assert listed == all_pages
         requested.append((sample_id, collection_id, synchronized))
         return {"id": sample_id}
 
     monkeypatch.setattr(api_client, "ElementSet", Elements)
+    monkeypatch.setattr(client, "sample_details", details)
     monkeypatch.setattr(api_client.ChemotionClient, "inventory_entry", entry)
     rows = client.inventory(42, collections=[{"id": 42}, {"id": 43, "_synchronized": True}],
                             progress=messages.append)
     expected = [20, 10, 2, 1]
     assert [row["id"] for row in rows] == expected
     assert requested == [(number, 43 if number == 20 else 42, number == 20) for number in expected]
+    assert detail_batches == [([20], 43, True), ([10, 2, 1], 42, False)]
     assert [row["_inventory_position"] for row in rows] == list(range(len(expected)))
     assert [message for message in messages if message.startswith("Retrieving sample information:")] == [
         f"Retrieving sample information: {index} of {len(expected)}…" for index in range(1, len(expected) + 1)]

@@ -34,6 +34,7 @@ _authentication_token = None
 
 # Keep concurrent inventory reads small enough to avoid TLS connection bursts.
 MAX_CONCURRENT_SAMPLE_REQUESTS = 8
+SAMPLE_DETAIL_BATCH_SIZE = 100
 REQUEST_TIMEOUT_SECONDS = 45
 TRANSIENT_REQUEST_ATTEMPTS = 3
 # Retry transient server failures only for safe read requests.
@@ -262,13 +263,14 @@ class ChemotionClient:
                 check_cancelled()
                 elements.next_page()
         # The compact list intentionally omits physical location and amount fields.
-        # Fetching each sample serially is very slow, so use a small, bounded pool.
+        # Fetch details in batches, then use a bounded pool for chemical metadata.
         # Each worker owns its authenticated chemotionapi session; mutable
         # sessions must not be shared between threads.
         if not samples: return []
         samples.sort(key=lambda sample: natural_sort_value(shown(sample.get("short_label"))), reverse=True)
         positions = {sample["id"]: position for position, sample in enumerate(samples)}
         rows = [None] * len(samples)
+        sample_details = {}
         worker_state = threading.local()
         def retrieve_sample(sample):
             check_cancelled()
@@ -277,7 +279,8 @@ class ChemotionClient:
                 client = ChemotionClient(); client.login(); worker_state.client = client
             check_cancelled()
             sample_collection_id, sample_synchronized = sample_contexts[sample["id"]]
-            row = client.inventory_entry(sample["id"], sample_collection_id, sample_synchronized, sample)
+            row = client.inventory_entry(sample["id"], sample_collection_id, sample_synchronized,
+                                         sample, sample_details.get(sample["id"]))
             row["_inventory_position"] = positions[sample["id"]]
             # Retain retrieved details even if Stop interrupts thumbnail display.
             rows[positions[sample["id"]]] = row
@@ -288,14 +291,45 @@ class ChemotionClient:
         workers = 1 if sequential else min(MAX_CONCURRENT_SAMPLE_REQUESTS, len(samples))
         executor = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="sample-retrieval")
         try:
-            initial_samples = samples[:1] if sequential else samples
-            futures = {executor.submit(retrieve_sample, sample): position for position, sample in enumerate(initial_samples)}
-            next_sample = 1
+            futures = {}
+            next_sample = 0
+            batch_end = 0
             completed = 0
-            pending = set(futures)
-            while pending:
+            pending = set()
+            batch_supported = True
+            empty_batch_contexts = set()
+            while pending or next_sample < len(samples):
                 if cancelled and cancelled.is_set():
                     raise InventoryLoadCancelled([row for row in rows if row is not None])
+                if not pending and next_sample == batch_end:
+                    batch_end = min(next_sample + SAMPLE_DETAIL_BATCH_SIZE, len(samples))
+                    sample_details.clear()
+                    groups = {}
+                    for sample in samples[next_sample:batch_end]:
+                        groups.setdefault(sample_contexts[sample["id"]], []).append(sample["id"])
+                    for (context_id, context_sync), sample_ids in groups.items():
+                        if cancelled and cancelled.is_set():
+                            raise InventoryLoadCancelled([row for row in rows if row is not None])
+                        if batch_supported and (context_id, context_sync) not in empty_batch_contexts:
+                            try:
+                                details = self.sample_details(sample_ids, context_id, context_sync)
+                                sample_details.update(details)
+                                # Some servers list shared samples but exclude
+                                # them from this route. Keep individual reads.
+                                if not details:
+                                    empty_batch_contexts.add((context_id, context_sync))
+                            except ConnectionError as error:
+                                if getattr(error.__cause__, "status_code", None) not in {404, 405}:
+                                    raise
+                                # Older servers may not expose the batch route.
+                                batch_supported = False
+                if not pending:
+                    submit_end = next_sample + 1 if sequential else batch_end
+                    for position in range(next_sample, submit_end):
+                        future = executor.submit(retrieve_sample, samples[position])
+                        futures[future] = position
+                        pending.add(future)
+                    next_sample = submit_end
                 done, pending = wait(pending, timeout=0.1, return_when=FIRST_COMPLETED)
                 batch_rows = []
                 for future in done:
@@ -310,20 +344,36 @@ class ChemotionClient:
                     rows_loaded(batch_rows)
                 if cancelled and cancelled.is_set():
                     raise InventoryLoadCancelled([row for row in rows if row is not None])
-                if sequential and next_sample < len(samples):
-                    future = executor.submit(retrieve_sample, samples[next_sample])
-                    futures[future] = next_sample
-                    pending.add(future)
-                    next_sample += 1
         finally:
             if cancelled and cancelled.is_set():
                 for future in (futures if "futures" in locals() else ()):
                     future.cancel()
             executor.shutdown(wait=not (cancelled and cancelled.is_set()), cancel_futures=True)
         return rows
-    def inventory_entry(self, sample_id, collection_id=None, synchronized=False, fallback_sample=None):
+    def sample_details(self, sample_ids, collection_id, synchronized=False):
+        """Fetch up to 100 full sample records through the read-only batch route."""
+        if not sample_ids:
+            return {}
+        if len(sample_ids) > SAMPLE_DETAIL_BATCH_SIZE:
+            raise ValueError("Request at most 100 sample details per batch.")
+        payload = {"ui_state": {"collection_id": collection_id,
+                                "is_sync_to_me": synchronized, "all": False,
+                                "included_ids": sample_ids, "excluded_ids": []},
+                   "limit": len(sample_ids)}
+        response = json.loads(self.request(
+            "/api/v1/samples/ui_state", json.dumps(payload).encode(),
+            {"Accept": "application/json", "Content-Type": "application/json"}, method="POST"))
+        records = response.get("samples")
+        if not isinstance(records, list):
+            raise ConnectionError("Chemotion returned an invalid sample batch.")
+        requested = set(sample_ids)
+        return {sample["id"]: sample for sample in records
+                if isinstance(sample, dict) and sample.get("id") in requested}
+
+    def inventory_entry(self, sample_id, collection_id=None, synchronized=False, fallback_sample=None, detail=None):
         """Retrieve the complete, current display record for one sample."""
-        detail = self.instance.get_sample(sample_id).json_data
+        if detail is None:
+            detail = self.instance.get_sample(sample_id).json_data
         chemical = json.loads(self.request(f"/api/v1/chemicals?sample_id={sample_id}").decode("utf-8"))
         row = inventory_row(detail, inventory_vendor(chemical), collection_id, synchronized)
         row["chemical_data"] = as_dict(chemical).get("chemical_data") or []
