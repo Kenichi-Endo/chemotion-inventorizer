@@ -165,7 +165,7 @@ class InventoryTreeview(ttk.Treeview):
                              "<Motion>", "<B1-Motion>", "<MouseWheel>",
                              "<Shift-MouseWheel>", "<Option-MouseWheel>", "<TouchpadScroll>"):
                 self.partial_tree.bind(sequence, lambda event, seq=sequence: self.forward_partial_event(event, seq))
-            for sequence in ("<Configure>", "<Expose>", "<<TreeviewSelect>>"):
+            for sequence in ("<Configure>", "<<TreeviewSelect>>"):
                 self.bind(sequence, self.queue_partial_refresh, add="+")
 
     def configure(self, cnf=None, **kwargs):
@@ -174,7 +174,10 @@ class InventoryTreeview(ttk.Treeview):
                 callback = kwargs[option]
 
                 def changed(first, last, callback=callback, axis=option):
-                    view = (float(first), float(last))
+                    # Appending samples changes scrollbar fractions without
+                    # moving the clipped row. Only movement needs a redraw.
+                    view = (round(float(first) * len(self.get_children()) * self.row_pixels)
+                            if axis == "yscrollcommand" else float(first))
                     if self.partial_views.get(axis) != view:
                         self.partial_views[axis] = view
                         self.defer_partial_refresh()
