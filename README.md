@@ -4,7 +4,7 @@ Chemotion Sample Manager is a desktop app based on [Chemotion API](https://githu
 
 ![Chemotion Sample Manager with anonymized locations and connection details](docs/images/inventory-anonymized.png)
 
-*Inventory view with molecule structures and sample details. Identifying text has been anonymized.*
+*App interface with molecule structures and selected columns. Identifying text has been anonymized.*
 
 ## Features
 - Browse samples from multiple collections in a customizable table with molecule structures and sample details.
@@ -82,8 +82,6 @@ Server and display preferences are saved separately in the current user's profil
 
 - macOS: `~/Library/Application Support/Chemotion Sample Manager/settings.json`
 - Windows: `%APPDATA%\Chemotion Sample Manager\settings.json`
-
-Preferences from Chemotion Inventorizer are loaded automatically when no new settings exist. Saved credentials continue to use the existing secure-storage identifier.
 
 Customizable launcher logs are in `~/Library/Logs/Chemotion Sample Manager/launcher.log` on macOS or `%LOCALAPPDATA%\Chemotion Sample Manager\Logs\launcher.log` on Windows.
 
