@@ -12,7 +12,7 @@ Chemotion Sample Manager is a desktop app based on [Chemotion API](https://githu
 - Edit sample details in bulk.
 - Remove samples from collections.
 - Open a sample in Chemotion for further inspection.
-- Create A4 PDF checklists for inventory verification.
+- Create A4 PDF checklists for sample verification.
 - Export a collection.
 
 ## Supported environments
@@ -24,14 +24,14 @@ Chemotion Sample Manager is a desktop app based on [Chemotion API](https://githu
 - **Customizable launcher:** Runs the editable Python source and requires Python 3.14. Choose this option to customize the app.
 
 ### Standalone app
-1. Download the ZIP for your platform from [Releases](https://github.com/Kenichi-Endo/chemotion-inventorizer/releases): **macos-apple-silicon**, **macos-intel**, or **windows-x64**.
+1. Download the ZIP for your platform from [Releases](https://github.com/Kenichi-Endo/chemotion-sample-manager/releases): **macos-apple-silicon**, **macos-intel**, or **windows-x64**.
 2. Extract the ZIP and open the app.
 3. On macOS, dismiss the verification warning, then open **System Settings → Privacy & Security → Open Anyway** and confirm.
 4. On Windows, when **Windows protected your PC** appears, select **More info → Run anyway**.
 
 ### Customizable launcher
 1. Install Python 3.14, if not installed: [Python for macOS](https://www.python.org/downloads/macos/) or [Python for Windows](https://www.python.org/downloads/windows/). On Windows, select **Add python.exe to PATH** and keep **tcl/tk and IDLE** selected during installation.
-2. Download **Source code (zip)** from [Releases](https://github.com/Kenichi-Endo/chemotion-inventorizer/releases) and extract it, or clone the repository. Keep the project folder intact when moving or sharing the app.
+2. Download **Source code (zip)** from [Releases](https://github.com/Kenichi-Endo/chemotion-sample-manager/releases) and extract it, or clone the repository. Keep the project folder intact when moving or sharing the app.
 3. Open `Chemotion Sample Manager.app` on macOS or double-click `Chemotion Sample Manager.cmd` on Windows. Keep an internet connection available during automatic dependency installation. The first launch may take a few minutes.
 
 If macOS says **The application “Chemotion Sample Manager.app” cannot be opened**:
@@ -61,12 +61,12 @@ If macOS says **The application “Chemotion Sample Manager.app” cannot be ope
 - To edit multiple samples, use Command/Ctrl-click to select multiple samples, or Shift-click to select a range. Edit a cell in the selection to apply the value to all selected rows.
 - To check or edit a sample in Chemotion, double-click a structure or short label.
 - To remove a sample from all loaded collections, select it and press Delete.
-- To check an inventory, click **Print…** to create an A4 checklist. Choose the columns and their order, page grouping, and optional **Correct** and **Incorrect** check columns.
+- To verify samples, click **Print…** to create an A4 checklist. Choose the columns and their order, page grouping, and optional **Correct** and **Incorrect** check columns.
 - To export a collection, click **Export collection…**. You can continue working while **Export queued** is shown; keep the app open until the completion dialog appears. This can be useful as a backup. Synchronized collections cannot be exported.
 
-![Inventory verification checklist with anonymized locations](docs/images/checklist-anonymized.png)
+![Sample verification checklist with anonymized locations](docs/images/checklist-anonymized.png)
 
-*A4 inventory checklist with verification columns. Locations have been anonymized.*
+*A4 sample checklist with verification columns. Locations have been anonymized.*
 
 ## Customization
 Edit the Python files in `src/chemotion_sample_manager/` manually or with a coding agent, then restart the customizable launcher.
@@ -93,8 +93,8 @@ Files in `src/chemotion_sample_manager/`:
 | `__init__.py` | Package identity and application name. |
 | `__main__.py` | Module and installed-command entry point; starts the GUI. |
 | `gui.py` | Window, table, dialogs, cell editing, and structure thumbnails. |
-| `client.py` | Chemotion sign-in, inventory retrieval, sample updates, and collection export. |
-| `inventory.py` | Inventory rows, column definitions, amount and date formatting, sorting, and location filtering. |
+| `client.py` | Chemotion sign-in, sample retrieval, sample updates, and collection export. |
+| `samples.py` | Sample rows, column definitions, amount and date formatting, sorting, and location filtering. |
 | `settings.py` | Saved preferences, column and print settings, and secure credential storage. |
 | `printing.py` | PDF checklist layout and generation. |
 | `bootstrap.py` | Customizable launcher environment and dependency setup. |

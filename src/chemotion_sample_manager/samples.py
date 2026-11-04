@@ -1,4 +1,4 @@
-"""Inventory row conversion, formatting, and column definitions."""
+"""Sample row conversion, formatting, and column definitions."""
 import re
 from datetime import datetime
 from decimal import Decimal, InvalidOperation, localcontext

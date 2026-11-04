@@ -1,5 +1,5 @@
 """Regression tests for displaying Chemotion sample amounts."""
-from chemotion_sample_manager import client as api_client, inventory, settings
+from chemotion_sample_manager import client as api_client, samples as inventory, settings
 
 from io import BytesIO
 import json

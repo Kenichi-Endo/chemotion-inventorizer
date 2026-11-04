@@ -27,7 +27,7 @@ from .settings import (
     saved_profile_settings,
     visible_columns,
 )
-from .inventory import (
+from .samples import (
     INVENTORY_HEADINGS,
     INVENTORY_KEYS,
     PRINT_CHECKLIST_HEADINGS,
@@ -2244,7 +2244,7 @@ class SampleManager(tk.Tk):
             return
         self.profile_settings["print_preset"] = layout
         save_profile_settings(self.profile_settings)
-        path = Path(tempfile.gettempdir()) / "Chemotion-inventory.pdf"
+        path = Path(tempfile.gettempdir()) / "Chemotion-samples.pdf"
         try:
             rows = self.filtered_rows()
             write_inventory_pdf(path, rows, layout)

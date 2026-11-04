@@ -19,7 +19,7 @@ from chemotion_api.elements.sample import Sample
 from chemotion_api.elements.utils import GasType
 from chemotion_api.generic_segments import GenericSegments
 from requests.exceptions import RequestException
-from .inventory import (
+from .samples import (
     as_dict,
     chemical_cas,
     inventory_row,

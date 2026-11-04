@@ -1,5 +1,5 @@
 """Check edit refreshes and partial failures without opening the application."""
-from chemotion_sample_manager import client as api_client, inventory
+from chemotion_sample_manager import client as api_client, samples as inventory
 
 from types import SimpleNamespace
 

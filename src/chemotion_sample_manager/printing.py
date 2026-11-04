@@ -2,7 +2,7 @@
 from .settings import (
     print_preset,
 )
-from .inventory import (
+from .samples import (
     INVENTORY_HEADINGS,
     INVENTORY_KEYS,
     PRINT_CHECKLIST_HEADINGS,
@@ -145,7 +145,7 @@ def pdf_table_pages(group, rows, columns, page_width, page_height, margin, line_
         nonlocal page, y
         if page: pages.append("\n".join(page))
         page, y = [], page_height - margin
-        text(margin, y, f"CHEMICAL INVENTORY{group}" + (" (continued)" if continued else ""), "F2", 14); y -= 19
+        text(margin, y, f"SAMPLE CHECKLIST{group}" + (" (continued)" if continued else ""), "F2", 14); y -= 19
         y -= 15
         page.append(f"0.45 G 0.6 w {margin:.1f} {y - 14:.1f} {table_width:.1f} 16 re S")
         for x, (title, _width) in zip(x_positions, columns): text(x + 2, y - 10, title, "F2", 8)

@@ -4,7 +4,7 @@ import os
 import re
 import subprocess
 from pathlib import Path
-from .inventory import (
+from .samples import (
     PRINT_CHECKLIST_KEYS,
     as_dict,
 )
